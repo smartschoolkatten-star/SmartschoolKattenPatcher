@@ -1,0 +1,2 @@
+be.smartschoolkatten.icons:drawable/ic_launcher_background = 0x7f080b49
+be.smartschoolkatten.icons:drawable/ic_launcher_foreground = 0x7f080b4a
