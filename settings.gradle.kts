@@ -22,5 +22,6 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "Smartschool Katten Patcher"
+rootProject.name = "SmartschoolKatten"
 include(":app")
+project(":app").projectDir = file("standalone")

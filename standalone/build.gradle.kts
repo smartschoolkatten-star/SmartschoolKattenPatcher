@@ -1,0 +1,86 @@
+import com.android.build.api.artifact.SingleArtifact
+import org.gradle.api.file.DirectoryProperty
+import org.gradle.api.provider.Property
+import org.gradle.api.tasks.Input
+import org.gradle.api.tasks.Internal
+import org.gradle.api.tasks.Optional
+import org.gradle.api.tasks.OutputDirectory
+import org.gradle.api.tasks.TaskAction
+import org.gradle.process.ExecOperations
+import java.util.Properties
+import javax.inject.Inject
+
+plugins {
+    alias(libs.plugins.android.application)
+}
+
+val revision = Regex("PATCH_REVISION\\s*=\\s*(\\d+)").find(
+    rootProject.file("app/src/main/java/be/smartschoolkatten/patcher/engine/KattenPatcher.java").readText()
+)!!.groupValues[1].toInt()
+
+android {
+    namespace = "be.smartschoolkatten.runtime"
+    compileSdk { version = release(37) }
+    defaultConfig {
+        applicationId = "be.smartschoolkatten.mobile"
+        minSdk = 32
+        targetSdk = 37
+        versionCode = 120300000 + revision
+        versionName = "12.3.0-katten.r$revision"
+    }
+    buildTypes {
+        debug { applicationIdSuffix = ".test" }
+    }
+    sourceSets {
+        getByName("main") {
+            java.setSrcDirs(listOf("../patch-runtime/src"))
+        }
+    }
+    compileOptions {
+        sourceCompatibility = JavaVersion.VERSION_11
+        targetCompatibility = JavaVersion.VERSION_11
+    }
+}
+
+/** Supplies the actual app APK to the standard Android Studio Run/Debug pipeline. */
+abstract class BuildKattenApk @Inject constructor(private val commands: ExecOperations) : DefaultTask() {
+    @get:Input abstract val javaHome: Property<String>
+    @get:Input abstract val sdkPath: Property<String>
+    @get:Input abstract val mode: Property<String>
+    @get:Input @get:Optional abstract val signingDirectory: Property<String>
+    @get:Internal abstract val checkout: DirectoryProperty
+    @get:OutputDirectory abstract val apkDirectory: DirectoryProperty
+
+    @TaskAction fun build() {
+        val command = mutableListOf("python3", checkout.file("tools/build-apk.py").get().asFile.absolutePath,
+            "--java-home", javaHome.get(), "--sdk", sdkPath.get(),
+            "--studio-output", apkDirectory.get().asFile.absolutePath, "--studio-variant", mode.get())
+        if (mode.get() == "debug") command += "--debug-test"
+        else {
+            check(signingDirectory.isPresent) { "Geef voor een release de bestaande app-sleutel op met -PkattenSigningDir=/privé/map." }
+            command += listOf("--signing-dir", signingDirectory.get())
+        }
+        commands.exec { workingDir(checkout.get().asFile); commandLine(command) }
+    }
+}
+
+val sdkProperties = Properties()
+rootProject.file("local.properties").takeIf { it.isFile }?.inputStream()?.use { sdkProperties.load(it) }
+val androidSdkPath = sdkProperties.getProperty("sdk.dir") ?: System.getenv("ANDROID_HOME")
+    ?: System.getenv("ANDROID_SDK_ROOT") ?: error("Android SDK ontbreekt; stel sdk.dir in local.properties in.")
+
+androidComponents.onVariants { variant ->
+    val producer = tasks.register<BuildKattenApk>("build${variant.name.replaceFirstChar { it.uppercase() }}KattenApk") {
+        javaHome.set(System.getProperty("java.home"))
+        sdkPath.set(androidSdkPath)
+        mode.set(variant.name)
+        signingDirectory.set(providers.gradleProperty("kattenSigningDir"))
+        checkout.set(rootProject.layout.projectDirectory)
+        inputs.dir(rootProject.file("patch-runtime/src"))
+        inputs.dir(rootProject.file("tools"))
+        inputs.dir(rootProject.file("app/src/main/java/be/smartschoolkatten/patcher/engine"))
+        inputs.dir(rootProject.file("assets/branding"))
+        inputs.file(rootProject.file("docs/extension-assets.json"))
+    }
+    variant.artifacts.use(producer).wiredWith(BuildKattenApk::apkDirectory).toCreate(SingleArtifact.APK)
+}

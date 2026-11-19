@@ -85,6 +85,8 @@ def main():
     parser.add_argument("--source", type=Path, help="Complete APK, split directory or APKS/XAPK archive; downloads source if omitted")
     parser.add_argument("--apk-editor", type=Path)
     parser.add_argument("--output", type=Path, default=ROOT / "artifacts/apk-release/Smartschool-Katten.apk")
+    parser.add_argument("--studio-output", type=Path, help="Android Gradle Plugin APK output directory")
+    parser.add_argument("--studio-variant", default="debug")
     signing = parser.add_mutually_exclusive_group(required=True)
     signing.add_argument("--signing-dir", type=Path, help="Existing signing.pk8 and signing.der; never generates a new release identity")
     signing.add_argument("--unsigned", action="store_true", help="Build for local signing; never publish this as an update")
@@ -96,6 +98,8 @@ def main():
     sdk_tools = max((args.sdk / "build-tools").iterdir(), key=lambda p: tuple(int(x) for x in re.findall(r"\d+", p.name)))
     android = args.sdk / "platforms/android-37.0/android.jar"
     revision = int(re.search(r"PATCH_REVISION\s*=\s*(\d+)", (ROOT / "app/src/main/java/be/smartschoolkatten/patcher/engine/KattenPatcher.java").read_text())[1])
+    if args.studio_output:
+        args.output = args.studio_output / "Smartschool-Katten.apk"
     args.output.parent.mkdir(parents=True, exist_ok=True)
     if args.unsigned and args.output.name == "Smartschool-Katten.apk":
         args.output = args.output.with_name("Smartschool-Katten-unsigned.apk")
@@ -109,7 +113,15 @@ def main():
 
     with tempfile.TemporaryDirectory(prefix="release-", dir=work_root) as temporary:
         work = Path(temporary)
-        source = args.source or download_source(work)
+        cached_source = work_root / "Smartschool-12.3.0-complete.apk"
+        cached_digest = cached_source.with_suffix(".apk.sha256")
+        source = args.source
+        if source is None and cached_source.is_file() and cached_digest.is_file():
+            with cached_source.open("rb") as stream:
+                if hashlib.file_digest(stream, "sha256").hexdigest() == cached_digest.read_text().strip():
+                    source = cached_source
+        if source is None:
+            source = download_source(work)
         if source.is_dir() or source.suffix.lower() in (".apks", ".xapk", ".apkm", ".zip"):
             editor = args.apk_editor or work_root / "APKEditor-1.4.9.jar"
             if not editor.exists():
@@ -120,6 +132,11 @@ def main():
             merged = work / "Smartschool-universal.apk"
             run(java, "-Xmx2g", "-jar", editor, "m", "-i", source, "-o", merged)
             source = merged
+        if args.source is None and source != cached_source:
+            shutil.copyfile(source, cached_source)
+            with cached_source.open("rb") as stream:
+                cached_digest.write_text(hashlib.file_digest(stream, "sha256").hexdigest())
+            source = cached_source
         run("python3", ROOT / "tools/build-payload.py", "--java-home", args.java_home, "--sdk", args.sdk)
         classes = work / "classes"
         classes.mkdir()
@@ -166,6 +183,13 @@ def main():
         with args.output.open("rb") as stream:
             digest = hashlib.file_digest(stream, "sha256").hexdigest()
         args.output.with_suffix(".apk.sha256").write_text(f"{digest}  {args.output.name}\n")
+        if args.studio_output:
+            metadata = {"version": 3, "artifactType": {"type": "APK", "kind": "Directory"},
+                        "applicationId": expected_package, "variantName": args.studio_variant,
+                        "elements": [{"type": "SINGLE", "filters": [], "attributes": [],
+                                      "versionCode": 120300000 + revision, "versionName": f"12.3.0-katten.r{revision}",
+                                      "outputFile": args.output.name}], "elementType": "File", "minSdkVersionForDexing": 32}
+            (args.studio_output / "output-metadata.json").write_text(json.dumps(metadata, indent=2) + "\n")
         print(f"Standalone APK katten-r{revision}: {args.output}")
 
 

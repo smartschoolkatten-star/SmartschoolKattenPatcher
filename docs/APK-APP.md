@@ -15,6 +15,23 @@ installatie. Bij ontbrekende releases of netwerkproblemen blijft de app bruikbaa
 
 ## Eerst testen
 
+### Met de Play-knop in Android Studio
+
+Open het bestaande project, kies **Sync Project with Gradle Files** en selecteer
+de runconfiguratie **Smartschool Katten** en je telefoon. **Run** bouwt,
+debug-ondertekent en installeert rechtstreeks **Smartschool Katten (test)**.
+De actieve `:app`-module is nu `standalone/`; de oude patcherinterface wordt niet
+gebouwd of gestart. De Java-runtime staat in het project zodat je er ook met de
+debugger doorheen kunt stappen.
+
+De complete originele basis wordt op de computer eenmalig opgehaald en daarna
+met een SHA-256-controle in de lokale buildcache hergebruikt. APK's handmatig
+downloaden, uitpakken of in een patcher kiezen is niet nodig. De eerste build
+vereist internet; latere builds gebruiken de cache. De bestaande kattenapp op
+je telefoon blijft afzonderlijk beschikbaar.
+
+### Automatische controles
+
 De workflow **APK testen** bouwt op de branch `apk-test` een getekende debugtest.
 Die heet **Smartschool Katten (test)**, gebruikt pakket `be.smartschoolkatten.mobile.test`
 en staat naast de bestaande app. Voor deze variant is geen releasesleutel nodig.
