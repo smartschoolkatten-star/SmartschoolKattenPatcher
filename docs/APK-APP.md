@@ -58,6 +58,18 @@ een nieuwe releasesleutel. Bewaar de identiteit buiten de repository en upload
 haar niet naar GitHub. Een download voor eindgebruikers krijgt altijd dezelfde
 APK-bestandsnaam; `versionCode = 120300000 + revision` neemt bij elke versie toe.
 
+Een bestaande JKS/PKCS12-keystore kan ook worden gebruikt na een ongetekende build:
+
+```sh
+python3 tools/sign-apk.py artifacts/apk-release/Smartschool-Katten-unsigned.apk \
+  --output artifacts/apk-release/Smartschool-Katten.apk --java-home /pad/naar/jdk \
+  --keystore /privé/map/bestaande-sleutel.jks --alias smartschoolkatten \
+  --match-installed /pad/naar/geëxporteerde-huidige-kattenapp.apk
+```
+
+De signer vraagt het wachtwoord in de terminal en stopt bij een afwijkend
+certificaat. De keystore of het wachtwoord worden niet naar GitHub verstuurd.
+
 ## Downloadpagina
 
 De bestanden in `site/` vormen een statische GitHub Pages-pagina. De Chrome- en
