@@ -77,3 +77,9 @@ Firefox-knoppen gaan naar de bestaande extensiewinkels. Android blijft als
 **Binnenkort beschikbaar** staan totdat een definitieve APK-release bestaat.
 Daarna haalt de pagina automatisch de juiste downloadlink op. Er is geen
 buildframework, externe lettertypebron of tracking nodig.
+
+De Pages-workflow draait pas na samenvoegen naar `main` of handmatig starten.
+Kies eenmalig **Settings → Pages → Source: GitHub Actions** in de repository.
+De gekoppelde GitHub-tools kunnen broncode en workflows beheren, maar hebben
+geen instellingstool om Pages namens de eigenaar te activeren. De website
+publiceren maakt geen APK-release.

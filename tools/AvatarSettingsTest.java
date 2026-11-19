@@ -44,9 +44,12 @@ public final class AvatarSettingsTest {
             check(master&&others?favorite:other,KattenRuntime.avatar(other));
             check(master&&others?favorite:other,KattenRuntime.displayAvatar(retainedOther));
             check(master&&others?favorite:other,KattenRuntime.plannerAvatar(other));
+            check(master&&own?favorite:ownPhoto,KattenRuntime.plannerAvatar(ownPhoto));
             check(master&&own&&card?favorite:ownPhoto,KattenRuntime.studentCardAvatar(ownPhoto));
             Card view=new Card();KattenRuntime.bindStudentCardAvatar(view,ownPhoto);
             check(master&&own&&card?favorite:ownPhoto,view.displayed);
+            KattenRuntime.bindStudentCardAvatar(view,null);
+            check(master&&own&&card?favorite:null,view.displayed);
             check(master&&own?favorite:ownPhoto,KattenRuntime.displayAvatar(retained));
         }
         values.put("enabled",true);values.put("others-enabled",true);

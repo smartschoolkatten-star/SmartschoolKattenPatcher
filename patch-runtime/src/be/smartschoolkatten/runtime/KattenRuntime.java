@@ -122,6 +122,7 @@ public final class KattenRuntime {
     }
     public static String plannerAvatar(String original) {
         try {
+            if(original!=null && ownPhotoUrls.contains(original))return selectOwnAvatar(original);
             if(!otherAvatarsEnabled() || activeCats.isEmpty())return original;
             return CatSelection.choose(original==null || original.trim().isEmpty()?"planner-no-photo":original,activeCats,assigned);
         } catch(RuntimeException | LinkageError error) {CrashDiagnostics.record(app,"Plannerkat kiezen mislukt",error);return original;}
@@ -420,6 +421,9 @@ public final class KattenRuntime {
             checkIn.setText(checkedIn?"Kom morgen terug":"🐾 Aai de kat");setEnabled(!checkedIn);
             setContentDescription("Streak: "+streak.count+" dagen. Record: "+streak.best+" dagen. "+checkIn.getText());
         }
+        @Override public void onInitializeAccessibilityNodeInfo(android.view.accessibility.AccessibilityNodeInfo info) {
+            super.onInitializeAccessibilityNodeInfo(info);info.setClassName(Button.class.getName());
+        }
     }
     private static void showMenu(Activity activity) {
         boolean dark=(activity.getResources().getConfiguration().uiMode & android.content.res.Configuration.UI_MODE_NIGHT_MASK)==android.content.res.Configuration.UI_MODE_NIGHT_YES;
@@ -467,9 +471,11 @@ public final class KattenRuntime {
         Switch streakVisible=settingSwitch(activity,general,"Streakbalk",textColor,accent);
         streakVisible.setChecked(preferences.getBoolean("streak-visible",true));
         streakVisible.setOnCheckedChangeListener((button,on)->preferences.edit().putBoolean("streak-visible",on).apply());
-        Button updates=menuButton(activity,"Controleren op updates",surface,textColor);
-        updates.setOnClickListener(v->AppUpdates.check(activity,true));
-        general.addView(updates,new LinearLayout.LayoutParams(-1,dp(activity,48)));
+        if(AppUpdates.supported(activity)) {
+            Button updates=menuButton(activity,"Controleren op updates",surface,textColor);
+            updates.setOnClickListener(v->AppUpdates.check(activity,true));
+            general.addView(updates,new LinearLayout.LayoutParams(-1,dp(activity,48)));
+        }
         TextView heading=text(activity,"Je favoriete kat",18);heading.setTextColor(textColor);heading.setTypeface(android.graphics.Typeface.create("sans-serif-medium",0));general.addView(heading);
         TextView hint=text(activity,"Tik op een kat voor je eigen profielfoto.",14);hint.setTextColor(textColor);general.addView(hint);
         TextView disableHint=text(activity,"Druk lang om een kat uit te schakelen.",12);disableHint.setTextColor(textColor);disableHint.setAlpha(0.65f);general.addView(disableHint);

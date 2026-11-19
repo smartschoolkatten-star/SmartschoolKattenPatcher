@@ -23,7 +23,12 @@ final class AppUpdates {
     private static final AtomicBoolean busy=new AtomicBoolean();
     private static final Handler main=new Handler(Looper.getMainLooper());
     private AppUpdates() {}
+    static boolean supported(Context context) {
+        try {context.getPackageManager().getActivityInfo(new ComponentName(context,UpdateActivity.class),0);return true;}
+        catch(PackageManager.NameNotFoundException missing) {return false;}
+    }
     static void check(Activity owner,boolean manual) {
+        if(!supported(owner))return;
         SharedPreferences state=owner.getSharedPreferences("katten-updates",Context.MODE_PRIVATE);
         long now=System.currentTimeMillis();
         if(!manual && now-state.getLong("last-check",0)<24*60*60*1000L)return;
