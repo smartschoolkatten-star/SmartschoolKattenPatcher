@@ -148,6 +148,10 @@ public final class KattenRuntime {
         catch(ReflectiveOperationException error) {CrashDiagnostics.record(app,"Leerlingenkaartfoto binden mislukt",error);}
         finally {if(previous==null)cardBinding.remove();else cardBinding.set(previous);}
     }
+    /** Only the own-card screen's flag update uses this; keep other window bits. */
+    public static void studentCardWindowFlags(Window window,int flags,int mask) {
+        window.setFlags(flags & ~WindowManager.LayoutParams.FLAG_SECURE,mask);
+    }
     public static String ownAvatar(String original) {
         try { return selectOwnAvatar(original); }
         catch(RuntimeException | LinkageError error) { CrashDiagnostics.record(app,"Eigen kattenfoto kiezen mislukt",error); return original; }

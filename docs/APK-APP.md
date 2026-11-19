@@ -2,6 +2,12 @@
 
 Status: testfase. Er worden nog geen releases gemaakt.
 
+Revision 46 verwijdert de screenshotblokkering op de eigen leerlingenkaart.
+De wijziging is beperkt tot de vlagupdate bij het openen van die pagina;
+helderheid, opruimen van de pagina en andere vensters behouden hun gedrag.
+De APK-build en controle van de precieze wijziging slagen. Een screenshot op
+het toestel moet na opnieuw starten via Android Studio worden bevestigd.
+
 De Android-download wordt een complete `Smartschool-Katten.apk`. Downloaden en
 patchen op de telefoon vervallen. De bestaande engine blijft als bouwgereedschap
 op de computer beschikbaar; hij maakt geen deel uit van de gebruiksstappen.

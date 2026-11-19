@@ -143,7 +143,7 @@ def main():
         engine = ROOT / "app/src/main/java/be/smartschoolkatten/patcher/engine"
         run(args.java_home / "bin/javac", "--release", "11", "-cp", f"{ROOT / 'app/libs/*'}:{android}", "-d", classes,
             *(engine / name for name in ("KattenPatcher.java", "BinaryResources.java", "SigningIdentity.java", "PatchValidation.java", "RuntimePayload.java")),
-            *(ROOT / "tools" / name for name in ("PatchCli.java", "UiHooksTest.java", "PatchAssertions.java", "ModelIntegrityTest.java", "RuntimeLinkageTest.java", "StartupSafetyTest.java")))
+            *(ROOT / "tools" / name for name in ("PatchCli.java", "UiHooksTest.java", "PatchAssertions.java", "ModelIntegrityTest.java", "RuntimeLinkageTest.java", "StartupSafetyTest.java", "ScreenCaptureScopeTest.java")))
         patched = work / "patched.apk"
         # The intermediate identity is never a release identity. Final signing
         # occurs only after the updater manifest and alignment are finished.
@@ -173,7 +173,7 @@ def main():
         run(sdk_tools / "zipalign", "-c", "-P", "16", "4", args.output)
         classpath = f"{classes}:{ROOT / 'app/libs/*'}"
         for test, inputs in (("UiHooksTest", [source]), ("PatchAssertions", [source, args.output]), ("ModelIntegrityTest", [source, args.output]),
-                             ("RuntimeLinkageTest", [args.output]), ("StartupSafetyTest", [args.output])):
+                             ("RuntimeLinkageTest", [args.output]), ("StartupSafetyTest", [args.output]), ("ScreenCaptureScopeTest", [source, args.output])):
             run(java, "-Xmx1g", "-cp", classpath, test, *inputs)
         badging = subprocess.run([str(sdk_tools / "aapt2"), "dump", "badging", str(args.output)], check=True, capture_output=True, text=True).stdout
         print(badging)

@@ -20,7 +20,7 @@ import java.util.zip.*;
 /** A local, version-specific APK patch. No upload of the source APK is needed. */
 public final class KattenPatcher {
     public static final String PACKAGE = "be.smartschoolkatten.mobile";
-    public static final int PATCH_REVISION = 45;
+    public static final int PATCH_REVISION = 46;
     private static final String ORIGINAL = "be.smartschool.mobile";
     private static final String RUNTIME = "Lbe/smartschoolkatten/runtime/KattenRuntime;";
     public interface Progress {
@@ -259,6 +259,10 @@ public final class KattenPatcher {
     private static MethodReference replacementCall(ClassDef cls,Method method,Reference reference) {
         if(!(reference instanceof MethodReference) || cls.getType().startsWith("Lly/img/"))return null;
         MethodReference call=(MethodReference)reference;
+        if(cls.getType().equals("Leac;") && method.getName().equals("k0")
+            && call.getDefiningClass().equals("Landroid/view/Window;") && call.getName().equals("setFlags")
+            && call.getReturnType().equals("V") && call.getParameterTypes().equals(Arrays.asList("I","I")))
+            return new ImmutableMethodReference(RUNTIME,"studentCardWindowFlags",Arrays.asList("Landroid/view/Window;","I","I"),"V");
         if(cls.getType().equals("Ldac;") && call.getDefiningClass().equals("Lbe/smartschool/mobile/modules/usercard/UserCardProfileView;")
             && call.getName().equals("setAvatar") && call.getReturnType().equals("V")
             && call.getParameterTypes().equals(Collections.singletonList("Ljava/lang/String;")))
