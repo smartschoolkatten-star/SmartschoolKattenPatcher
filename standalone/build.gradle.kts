@@ -26,14 +26,12 @@ android {
     namespace = "be.smartschoolkatten.runtime"
     compileSdk { version = release(37) }
     defaultConfig {
-        applicationId = "be.smartschoolkatten.mobile"
+        // Keep the identifier already installed from Studio so updates retain data.
+        applicationId = "be.smartschoolkatten.mobile.test"
         minSdk = 32
         targetSdk = 37
         versionCode = 120300000 + revision
         versionName = "12.3.0-katten.r$revision"
-    }
-    buildTypes {
-        debug { applicationIdSuffix = ".test" }
     }
     sourceSets {
         getByName("main") {

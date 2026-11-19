@@ -87,6 +87,7 @@ def main():
     parser.add_argument("--output", type=Path, default=ROOT / "artifacts/apk-release/Smartschool-Katten.apk")
     parser.add_argument("--studio-output", type=Path, help="Android Gradle Plugin APK output directory")
     parser.add_argument("--studio-variant", default="debug")
+    parser.add_argument("--application-id", choices=("be.smartschoolkatten.mobile", "be.smartschoolkatten.mobile.test"), default="be.smartschoolkatten.mobile.test")
     signing = parser.add_mutually_exclusive_group(required=True)
     signing.add_argument("--signing-dir", type=Path, help="Existing signing.pk8 and signing.der; never generates a new release identity")
     signing.add_argument("--unsigned", action="store_true", help="Build for local signing; never publish this as an update")
@@ -147,9 +148,10 @@ def main():
         patched = work / "patched.apk"
         # The intermediate identity is never a release identity. Final signing
         # occurs only after the updater manifest and alignment are finished.
-        identity = work_root / "debug-signing" if args.debug_test else work / "intermediate-signing"
+        stable_identity=Path.home() / ".local/share/smartschool-katten/signing"
+        identity = (stable_identity if (stable_identity / "signing.pk8").is_file() else work_root / "debug-signing") if args.debug_test else work / "intermediate-signing"
         run(java, "-Xmx1g", "-cp", f"{classes}:{ROOT / 'app/libs/*'}", "PatchCli", source, patched,
-            ROOT / "app/src/main/assets/patch", identity, "be.smartschoolkatten.mobile.test" if args.debug_test else "be.smartschoolkatten.mobile")
+            ROOT / "app/src/main/assets/patch", identity, args.application_id, "Smartschool Katten")
         unsigned = work / "unsigned.apk"
         with zipfile.ZipFile(patched) as original, zipfile.ZipFile(unsigned, "w") as output:
             for item in original.infolist():
@@ -177,7 +179,7 @@ def main():
             run(java, "-Xmx1g", "-cp", classpath, test, *inputs)
         badging = subprocess.run([str(sdk_tools / "aapt2"), "dump", "badging", str(args.output)], check=True, capture_output=True, text=True).stdout
         print(badging)
-        expected_package = "be.smartschoolkatten.mobile.test" if args.debug_test else "be.smartschoolkatten.mobile"
+        expected_package = args.application_id
         if f"package: name='{expected_package}'" not in badging or args.debug_test and "application-debuggable" not in badging:
             raise ValueError("Wrong package or missing debug flag in test APK")
         with args.output.open("rb") as stream:

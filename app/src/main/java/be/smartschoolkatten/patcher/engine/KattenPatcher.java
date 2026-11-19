@@ -20,7 +20,7 @@ import java.util.zip.*;
 /** A local, version-specific APK patch. No upload of the source APK is needed. */
 public final class KattenPatcher {
     public static final String PACKAGE = "be.smartschoolkatten.mobile";
-    public static final int PATCH_REVISION = 46;
+    public static final int PATCH_REVISION = 47;
     private static final String ORIGINAL = "be.smartschool.mobile";
     private static final String RUNTIME = "Lbe/smartschoolkatten/runtime/KattenRuntime;";
     public interface Progress {
@@ -32,10 +32,12 @@ public final class KattenPatcher {
     private final Map<String,String> renamed = new HashMap<>();
     private final String targetPackage,displayName;
     public KattenPatcher() {this(PACKAGE);}
-    public KattenPatcher(String targetPackage) {
+    public KattenPatcher(String targetPackage) {this(targetPackage,targetPackage.endsWith(".test")?"Smartschool Katten (test)":"Smartschool Katten");}
+    public KattenPatcher(String targetPackage,String displayName) {
         if(!targetPackage.equals(PACKAGE) && !targetPackage.equals(PACKAGE+".test"))throw new IllegalArgumentException("Onbekende appvariant");
         this.targetPackage=targetPackage;
-        displayName=targetPackage.endsWith(".test")?"Smartschool Katten (test)":"Smartschool Katten";
+        if(!displayName.equals("Smartschool Katten") && !displayName.equals("Smartschool Katten (test)"))throw new IllegalArgumentException("Onbekende appnaam");
+        this.displayName=displayName;
         for(String suffix:Arrays.asList("androidx-startup","provider","IMGLYAutoInit","firebaseinitprovider","SentryInitProvider","SentryPerformanceProvider","SentryNdkPreloadProvider","DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION"))
             renamed.put(ORIGINAL+"."+suffix,targetPackage+"."+suffix);
     }

@@ -1,6 +1,6 @@
 # Smartschool Katten als gewone APK
 
-Status: testfase. Er worden nog geen releases gemaakt.
+De Android-app wordt rechtstreeks als getekende APK gepubliceerd.
 
 Revision 46 verwijdert de screenshotblokkering op de eigen leerlingenkaart.
 De wijziging is beperkt tot de vlagupdate bij het openen van die pagina;
@@ -25,7 +25,7 @@ installatie. Bij ontbrekende releases of netwerkproblemen blijft de app bruikbaa
 
 Open het bestaande project, kies **Sync Project with Gradle Files** en selecteer
 de runconfiguratie **Smartschool Katten** en je telefoon. **Run** bouwt,
-debug-ondertekent en installeert rechtstreeks **Smartschool Katten (test)**.
+debug-ondertekent en installeert rechtstreeks **Smartschool Katten**.
 De actieve `:app`-module is nu `standalone/`; de oude patcherinterface wordt niet
 gebouwd of gestart. De Java-runtime staat in het project zodat je er ook met de
 debugger doorheen kunt stappen.
@@ -39,7 +39,7 @@ je telefoon blijft afzonderlijk beschikbaar.
 ### Automatische controles
 
 De workflow **APK testen** bouwt op de branch `apk-test` een getekende debugtest.
-Die heet **Smartschool Katten (test)**, gebruikt pakket `be.smartschoolkatten.mobile.test`
+Die heet **Smartschool Katten**, gebruikt pakket `be.smartschoolkatten.mobile.test`
 en staat naast de bestaande app. Voor deze variant is geen releasesleutel nodig.
 De testsleutel staat in een aparte buildcache en wordt nooit voor de gewone app gebruikt.
 De workflow publiceert geen release. De bron is de complete
@@ -107,5 +107,16 @@ buildframework, externe lettertypebron of tracking nodig.
 De Pages-workflow draait pas na samenvoegen naar `main` of handmatig starten.
 Kies eenmalig **Settings → Pages → Source: GitHub Actions** in de repository.
 De gekoppelde GitHub-tools kunnen broncode en workflows beheren, maar hebben
-geen instellingstool om Pages namens de eigenaar te activeren. De website
-publiceren maakt geen APK-release.
+geen instellingstool om Pages namens de eigenaar te activeren. De website wordt vanuit de branch `gh-pages` gepubliceerd.
+APK-publicatie gebeurt met de aparte publicatieworkflow en een lokaal getekend bestand.
+
+## Ondertekening en publicatie
+
+De vaste app-identiteit staat lokaal in `~/.local/share/smartschool-katten/signing/`.
+Die identiteit is overgenomen van de al werkende Android Studio-installatie.
+Het bestaande pakket-ID blijft behouden zodat updates de appgegevens bewaren;
+de zichtbare appnaam en openbare APK bevatten geen testnaam. Een gewone release
+is niet debuggable. De private sleutel wordt niet naar GitHub verstuurd.
+
+De publicatieworkflow controleert de vooraf getekende APK, certificaatvingerafdruk,
+pakketnaam, versie en SHA-256 vóór de release beschikbaar wordt.
