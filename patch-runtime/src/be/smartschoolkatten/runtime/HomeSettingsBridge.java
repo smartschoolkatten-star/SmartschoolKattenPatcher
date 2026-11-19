@@ -46,6 +46,31 @@ final class HomeSettingsBridge {
             throw new IllegalStateException(cause);
         }
     }
+    /** Both children share the original grid's exact horizontal bounds and photo. */
+    static void favourites(int changed,Object composer,Object action,Object modifier,java.util.List<?> favourites) {
+        try {
+            Object gridModifier=modifier;
+            if(KattenRuntime.streakVisible()) {
+                Object factory=callback(context->{
+                    Context owner=(Context)context;
+                    FrameLayout slot=new FrameLayout(owner);
+                    slot.addView(new KattenRuntime.HomeStreakView(owner),new FrameLayout.LayoutParams(-1,Math.round(48*owner.getResources().getDisplayMetrics().density)));
+                    return slot;
+                });
+                Object update=callback(view->{((KattenRuntime.HomeStreakView)((FrameLayout)view).getChildAt(0)).update();return Api.unit;});
+                Object fullWidth=method("androidx.compose.foundation.layout.b","e",Api.modifier,float.class)
+                    .invoke(null,modifier,1f);
+                Api.androidView.invoke(null,factory,fullWidth,update,composer,0,0);
+                // The host uses a Box over its seasonal photograph. Keep the pill
+                // at the grid's original top, and move just the grid down 56dp (48dp pill + 8dp gap).
+                gridModifier=method("tx6","H",Api.modifier,float.class,float.class,float.class,float.class)
+                    .invoke(null,modifier,0f,56f,0f,0f);
+                changed &= ~0x380;
+            }
+            method("b15","b",int.class,Api.composer,Api.function,Api.modifier,java.util.List.class)
+                .invoke(null,changed,composer,action,gridModifier,favourites);
+        } catch(ReflectiveOperationException error) {throw new IllegalStateException("Startschermtegels laden mislukt",error);}
+    }
     private static final class SettingsRow extends LinearLayout {
         final Button configure,cat;
         final float density;

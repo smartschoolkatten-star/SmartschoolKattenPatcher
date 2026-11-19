@@ -65,7 +65,7 @@ public final class PatchValidation {
                                         if (call.getRegisterCount() != 1 || call.getStartRegister() != body.getRegisterCount() - 1)
                                             throw new IOException("Onveilige opstartpatch: verkeerd Application-register.");
                                         application = true;
-                                    } else if (ref.getName().equals("avatar") || ref.getName().equals("ownAvatar")) {
+                                    } else if (ref.getName().equals("rememberAvatar") || ref.getName().equals("rememberOwnAvatar")) {
                                         avatarCalls++;
                                         if (Arrays.asList("equals", "hashCode", "toString", "copy", "copy$default", "writeToParcel", "<init>").contains(method.getName()))
                                             throw new IOException("De kattenpatch verandert interne modelgegevens.");

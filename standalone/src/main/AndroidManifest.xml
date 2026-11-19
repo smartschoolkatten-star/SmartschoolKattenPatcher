@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Studio uses this launcher to deploy the APK supplied by BuildKattenApk.
+         The built APK contains Smartschool's complete manifest and application. -->
+    <application android:label="Smartschool Katten">
+        <activity android:name="be.smartschool.mobile.SplashActivity" android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+    </application>
+</manifest>

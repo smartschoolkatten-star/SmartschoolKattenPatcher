@@ -12,6 +12,11 @@ public final class UiHooksTest {
             }
         }
         method("Lnc5;","b","V",true,"Lb34;","Lhx6;","Lb34;","Ldm1;","I","I");
+        method("Lb15;","b","V",true,"I","Ldm1;","Lb34;","Lhx6;","Ljava/util/List;");
+        method("Landroidx/compose/foundation/layout/b;","e","Lhx6;",true,"Lhx6;","F");
+        method("Ltx6;","H","Lhx6;",true,"Lhx6;","F","F","F","F");
+        method("Lbe/smartschool/mobile/network/services/ProfileInformation;","getTitle","Ljava/lang/String;",false);
+        method("Lbe/smartschool/mobile/network/services/ProfileInformation;","getContent","Ljava/lang/String;",false);
         method("Lo26;","P","V",true,"Lbe/smartschool/mobile/ui/components/header/SmscHeader;","Lbe/smartschool/mobile/components/quicksearch/data/QuickSearchGraphic;");
         method("Lbe/smartschool/mobile/ui/components/header/SmscHeader;","getImage","Landroid/widget/ImageView;",false);
         method("Lbe/smartschool/mobile/ui/components/header/SmscHeader;","setIconRoundedBackground","V",false,"Z");

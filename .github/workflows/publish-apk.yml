@@ -1,0 +1,37 @@
+name: Smartschool Katten publiceren
+on:
+  push:
+    branches: [release-staging]
+permissions:
+  contents: write
+concurrency:
+  group: publish-apk
+  cancel-in-progress: false
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Getekende APK en controlesom voorbereiden
+        run: python3 tools/assemble-release.py
+      - name: App-handtekening controleren
+        run: |
+          mkdir -p build/publication/check
+          javac --release 11 -cp 'app/libs/*' -d build/publication/check tools/ReleaseArtifactCheck.java app/src/main/java/be/smartschoolkatten/patcher/engine/BinaryResources.java
+          cert=$(python3 -c 'import json; print(json.load(open(".release/manifest.json"))["certificateSha256"])')
+          package=$(python3 -c 'import json; print(json.load(open(".release/manifest.json"))["applicationId"])')
+          version=$(python3 -c 'import json; print(json.load(open(".release/manifest.json"))["versionCode"])')
+          java -cp 'build/publication/check:app/libs/*' ReleaseArtifactCheck build/publication/Smartschool-Katten.apk "$cert" "$package" "$version"
+      - name: Definitieve release publiceren
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag=$(python3 -c 'import json; print(json.load(open(".release/manifest.json"))["tag"])')
+          source_commit=$(python3 -c 'import json; print(json.load(open(".release/manifest.json"))["sourceCommit"])')
+          gh release create "$tag" build/publication/Smartschool-Katten.apk build/publication/Smartschool-Katten.apk.sha256 --draft --target "$source_commit" --title "Smartschool Katten ${tag#katten-}" --notes-file build/publication/notes.md
+          gh release edit "$tag" --draft=false --latest

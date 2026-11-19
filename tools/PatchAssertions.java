@@ -13,7 +13,7 @@ public final class PatchAssertions {
         if(!after.containsAll(before))throw new AssertionError("Original classes lost");
         if(!after.contains("Lbe/smartschoolkatten/runtime/KattenRuntime;"))throw new AssertionError("Runtime missing");
         int avatars=0,init=0,editors=0,home=0,images=0,settings=0,extraImages=0,directImages=0,glideImages=0,composeImages=0,ownStudentCard=0;
-        int plannerPhotos=0,resultTeacherPhotos=0,plannerHeaders=0;
+        int plannerPhotos=0,resultTeacherPhotos=0,plannerHeaders=0,cardInformation=0,ownSources=0,ownUi=0;
         try(ZipFile zip=new ZipFile(args[1])) {
             for(ZipEntry e:Collections.list(zip.entries()))if(e.getName().matches("classes[0-9]*\\.dex")) {
                 DexBackedDexFile dex=DexBackedDexFile.fromInputStream(null,new BufferedInputStream(zip.getInputStream(e)));
@@ -26,14 +26,30 @@ public final class PatchAssertions {
                             MethodReference ref=(MethodReference)((ReferenceInstruction)i).getReference();
                             if(ref.getDefiningClass().equals("Lbe/smartschoolkatten/runtime/KattenRuntime;")) {
                                 if(ref.getName().equals("init"))init++;
+                                if(ref.getName().equals("ownUserAvatar")) {
+                                    ownUi++;
+                                    if(!((cls.getType().equals("Lm66;") && m.getName().equals("h"))
+                                        || (cls.getType().equals("Lbe/smartschool/mobile/modules/home/presentation/HomeFragment;") && m.getName().equals("d1"))))
+                                        throw new AssertionError("Own favorite substituted outside UI binding");
+                                }
+                                if(ref.getName().equals("rememberOwnAvatar")) {
+                                    ownSources++;
+                                    if(!cls.getType().equals("Lbe/smartschool/mobile/model/User;") || !m.getName().equals("getAvatarUrl"))
+                                        throw new AssertionError("Own photo identity recorded outside source getter");
+                                }
+                                if(ref.getName().equals("ownAvatar") && cls.getType().equals("Lbe/smartschool/mobile/model/User;"))
+                                    throw new AssertionError("Source getter still substitutes the favorite into retained state");
+                                if(ref.getName().equals("studentCardInformation")) {
+                                    cardInformation++;
+                                    if(!cls.getType().equals("Ldac;") || !m.getName().equals("a"))
+                                        throw new AssertionError("Experimental information hook outside own card UI");
+                                }
                                 if(ref.getName().equals("plannerHeader"))plannerHeaders++;
-                                if(ref.getName().equals("home")) {
+                                if(ref.getName().equals("home"))throw new AssertionError("Old floating home streak hook remains");
+                                if(ref.getName().equals("homeFavourites")) {
                                     home++;
-                                    if(!cls.getType().equals("Lbe/smartschool/mobile/modules/home/presentation/HomeFragment;") || !m.getName().equals("D0") || index!=0
-                                        || !(i instanceof RegisterRangeInstruction)
-                                        || ((RegisterRangeInstruction)i).getStartRegister()!=m.getImplementation().getRegisterCount()-2
-                                        || ((RegisterRangeInstruction)i).getRegisterCount()!=1)
-                                        throw new AssertionError("Unsafe home view hook");
+                                    if(!cls.getType().equals("Lb15;") || !m.getName().equals("d"))
+                                        throw new AssertionError("Streak pill outside photo-backed HomeFavourites grid slot");
                                 }
                                 if(ref.getName().equals("editorUnavailable"))editors++;
                                 if(ref.getName().equals("avatarImage"))images++;
@@ -49,15 +65,13 @@ public final class PatchAssertions {
                                     if(!cls.getType().equals("Lrc5;") || !m.getName().equals("b"))
                                         throw new AssertionError("Settings row outside ConfigureCard");
                                 }
-                                if(ref.getName().equals("avatar") || ref.getName().equals("ownAvatar") || ref.getName().equals("studentCardAvatar") || ref.getName().equals("plannerAvatar")) {
-                                    if(ref.getName().equals("plannerAvatar"))plannerPhotos++;
-                                    if(ref.getName().equals("avatar") && cls.getType().equals("Lbe/smartschool/mobile/model/ApiUser;") && m.getName().equals("getPictureUrl"))resultTeacherPhotos++;
-                                    if(index>0 && instructions.get(index-1) instanceof ReferenceInstruction
-                                        && ((ReferenceInstruction)instructions.get(index-1)).getReference().toString().equals("Lgac;->a:Ljava/lang/String;")) {
-                                        if(!ref.getName().equals("studentCardAvatar") || !cls.getType().equals("Ldac;"))
-                                            throw new AssertionError("Own student card uses random avatar or unexpected caller");
-                                        ownStudentCard++;
-                                    }
+                                if(ref.getName().equals("bindStudentCardAvatar")) {
+                                    if(!cls.getType().equals("Ldac;"))throw new AssertionError("Unexpected own-card binding");
+                                    ownStudentCard++;
+                                }
+                                if(ref.getName().equals("rememberAvatar") || ref.getName().equals("rememberOwnAvatar")) {
+                                    if(ref.getName().equals("rememberAvatar") && cls.getType().startsWith("Lbe/smartschool/mobile/modules/planner/"))plannerPhotos++;
+                                    if(ref.getName().equals("rememberAvatar") && cls.getType().equals("Lbe/smartschool/mobile/model/ApiUser;") && m.getName().equals("getPictureUrl"))resultTeacherPhotos++;
                                     if(index+1>=instructions.size() || instructions.get(index+1).getOpcode()!=Opcode.MOVE_RESULT_OBJECT)throw new AssertionError("Avatar result not consumed");
                                     avatars++;
                                 }
@@ -70,9 +84,12 @@ public final class PatchAssertions {
             if(zip.getEntry("res/drawable/ic_launcher_foreground.jpg")==null)throw new AssertionError("Icon missing");
         }
         if(ownStudentCard!=1)throw new AssertionError("Own student card favorite hook missing or duplicated");
+        if(ownSources!=1)throw new AssertionError("Own source photo registration missing or duplicated");
+        if(ownUi!=3)throw new AssertionError("Own photo UI hooks missing: "+ownUi);
+        if(cardInformation!=1)throw new AssertionError("Experimental card display hook missing or duplicated");
         if(plannerPhotos==0 || resultTeacherPhotos!=1 || plannerHeaders==0)throw new AssertionError("Planner header/photo or results teacher pictureUrl hook missing");
         System.out.println("PASS planner photo hooks and results teacher ApiUser.getPictureUrl hook");
-        System.out.println("PASS own student card uses favorite avatar in its UI binding");
+        System.out.println("PASS photo sources retain original URLs and own student card has an independent UI binding");
         if(images<1 || settings!=1 || extraImages<1 || directImages!=9)throw new AssertionError("Avatar crop, direct loader or home settings row hook missing: direct="+directImages);
         System.out.println("PASS "+directImages+" direct image loader hooks, including default-argument delegation");
         if(glideImages<1)throw new AssertionError("Direct Glide image routes missing");
@@ -81,7 +98,7 @@ public final class PatchAssertions {
         System.out.println("PASS shared Compose/Coil image hook used by message and menu avatars");
         System.out.println("PASS "+images+" avatar loaders plus "+extraImages+" additional image loaders and one home settings row");
         if(home!=1)throw new AssertionError("Home streak hook missing or duplicated");
-        System.out.println("PASS one home streak hook at entry with original View parameter");
+        System.out.println("PASS streak pill inside photo-backed HomeFavourites grid; no floating overlay");
         if(editors < 1)throw new AssertionError("Photo editor actions were not disabled");
         System.out.println("PASS " + editors + " host photo-editor actions disabled; licensed SDK retained");
         if(avatars<40 || init!=1)throw new AssertionError("Missing patch hooks");
