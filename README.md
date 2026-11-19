@@ -1,3 +1,19 @@
+## Gewone APK — in testfase
+
+Smartschool Katten krijgt een rechtstreekse APK-download met updatecontrole in de
+app. De downloadpagina voor Chrome, Firefox en Android staat in `site/`.
+Zie [APK bouwen en testen](docs/APK-APP.md). Er worden eerst tests uitgevoerd;
+er zijn nog geen APK-releases gepubliceerd. De notities hieronder beschrijven de
+eerdere patcher.
+
+---
+
+De patcher haalt voortaan bij **Patchen** de nieuwste losse engine van jouw GitHub
+op. Je hoeft voor gewone kattenupdates geen nieuwe patcher te installeren.
+Zie [GitHub-updates en publicatie](docs/GITHUB-UPDATES.md) voor de eerste release,
+privétoegang en het bouwen van het ZIP-patchbestand. De oudere revisionnotities
+hieronder beschrijven de voorgaande werkwijze met een ingebouwde engine.
+
 Huidige patchrevision: **r38**. De foto rechts bovenaan onder dag/datum in de planner heeft een eigen kattenlaadroute. Plannerfoto’s en leerkrachtfoto’s bij resultaten ondersteunen nu ook `pictureUrl`. Ontbrekende plannerfoto’s krijgen bij ingeschakelde kattenprofielfoto’s een kat. ‘Kat op leerlingenkaart’ blijft een aparte instelling, standaard uit. ‘Kom morgen terug’ heeft een transparante achtergrond. Werk de patcher bij en maak daarna een nieuw r38-installatiepakket.
 
 Revision **r14**: de streakbalk neemt een achtergrondpixel van de zichtbare homepagina over. Profielfoto’s worden expliciet rond geclipt. CoverDrawable gebruikt voor de schaal max(vakbreedte/fotobreedte, vakhoogte/fotohoogte): in een cirkel is de kortste zijde minimaal de diameter. De lange zijde wordt vanuit het midden bijgesneden. Er worden geen vermeende witte randen uit de bronfoto verwijderd. GIFs blijven als animatie beschikbaar. Uiterlijk op het toestel controleren.
@@ -27,15 +43,14 @@ maakt lokaal een tweede app: **Smartschool Katten**, pakket
 
 ## Gebruik
 
-1. Synchroniseer Gradle in Android Studio en bouw de patcher opnieuw.
-2. Kies **Smartschool 12.3.0 downloaden**. De download gebruikt Aptoide-release
-   `76524701` met `aab=1`. Processoronderdelen worden lokaal geselecteerd. De basis-APK en bijbehorende
-   processor-, scherm- en taalonderdelen worden samen opgehaald; de aangeboden en
-   gedownloade versies worden gecontroleerd.
-3. Kies **Doorgaan → Kattenpatch maken**. Dit kan even duren en gebruikt behoorlijk
-   wat werkgeheugen. Sluit andere zware apps als het toestel onvoldoende geheugen meldt.
-4. Kies **Smartschool Katten installeren**. Android vraagt eventueel om de patcher
-   toestemming te geven om apps te installeren, gevolgd door installatiebevestiging.
+1. Installeer de patcher met de GitHub-loader eenmaal vanaf de hoofdsite.
+2. Voor de privérepository: stel via **GitHub-toegang** een eigen token met alleen
+   Contents: Read in. Voor openbare releases is dit niet nodig.
+3. Kies **Patchen**. De nieuwste ZIP met patchbestanden wordt van GitHub gehaald en
+   maakt lokaal de kattenapp. De juiste Smartschool-versie wordt zo nodig automatisch
+   gedownload. Bij onvoldoende werkgeheugen: sluit andere zware apps.
+4. Kies **Installeren** of **Update installeren** en bevestig bij Android.
+   Dezelfde lokale ondertekeningssleutel behoudt de login en instellingen van de kattenapp.
 5. Open Smartschool Katten en meld je aan. Op de navigatie/home-Activity staat een
    **🐈-knop** voor katten aan/uit, je favoriete kat en de dagelijkse katten-check-in.
 
@@ -107,7 +122,7 @@ Aptoide-basis-APK wordt terecht afgewezen; split-pakketten gebruiken `ApkSet.pat
 
 ```sh
 mkdir -p build/patch-check
-javac --release 11 -cp 'app/libs/*' -d build/patch-check \
+javac --release 11 -cp "app/libs/*:$ANDROID_HOME/platforms/android-37.0/android.jar" -d build/patch-check \
   app/src/main/java/be/smartschoolkatten/patcher/engine/*.java tools/PatchCli.java
 java -Xmx256m -cp 'build/patch-check:app/libs/*' PatchCli \
   /pad/naar/Smartschool-12.3.0.apk build/Smartschool-Katten-12.3.0.apk \

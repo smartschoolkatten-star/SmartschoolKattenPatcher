@@ -31,10 +31,12 @@ public final class ModelIntegrityTest {
                 for (ClassDef cls : dex.getClasses()) {
                     boolean model = cls.getType().startsWith("Lbe/smartschool/mobile/model/")
                         || Arrays.asList("Lik0;", "Ldi9;", "Lnza;").contains(cls.getType());
+                    boolean cardSource = cls.getType().equals("Lbe/smartschool/mobile/network/services/UserCardInfo;")
+                        || cls.getType().equals("Lbe/smartschool/mobile/network/services/ProfileInformation;");
                     boolean editorSdk = cls.getType().startsWith("Lly/img/android/");
-                    if (!model && !editorSdk) continue;
+                    if (!model && !editorSdk && !cardSource) continue;
                     for (Method method : cls.getMethods()) {
-                        if ((!editorSdk && !OPERATIONS.contains(method.getName())) || method.getImplementation() == null) continue;
+                        if ((!editorSdk && !cardSource && !OPERATIONS.contains(method.getName())) || method.getImplementation() == null) continue;
                         StringBuilder shape = new StringBuilder();
                         MethodImplementation body = method.getImplementation();
                         shape.append(body.getRegisterCount()).append(':').append(method.getAccessFlags());

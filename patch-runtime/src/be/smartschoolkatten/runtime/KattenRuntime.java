@@ -29,6 +29,9 @@ public final class KattenRuntime {
     private static volatile List<String> activeCats=Collections.emptyList();
     private static volatile Set<String> disabledCats=Collections.emptySet();
     private static final ConcurrentHashMap<String,String> assigned=new ConcurrentHashMap<>();
+    private static final Set<String> ownPhotoUrls=ConcurrentHashMap.newKeySet();
+    private static final Set<String> avatarPhotoUrls=ConcurrentHashMap.newKeySet();
+    private static final ThreadLocal<Boolean> cardBinding=new ThreadLocal<>();
     private static final Map<ImageView,String> imageRequests=Collections.synchronizedMap(new WeakHashMap<>());
     private static final class ImageWorkers {
         static final ExecutorService images = Executors.newFixedThreadPool(4);
@@ -73,6 +76,7 @@ public final class KattenRuntime {
                         try {
                             View streak=activity.getWindow().getDecorView().findViewWithTag(HOME_TAG);
                             if(streak instanceof HomeStreakView)((HomeStreakView)streak).update();
+                            AppUpdates.check(activity,false);
                         }
                         catch(RuntimeException | LinkageError error) { CrashDiagnostics.record(app,"Kattenknop plaatsen mislukt",error); }
                     });
@@ -90,7 +94,11 @@ public final class KattenRuntime {
     }
     private static String selectAvatar(String original) {
         if(original==null || original.isEmpty())return original;
-        if(cats.isEmpty() || preferences==null || !preferences.getBoolean("enabled",true))return original;
+        // Shared Avatar models can also render the current user. Keep that
+        // photograph under the own-photo switch instead of the others switch.
+        if(ownPhotoUrls.contains(original))return selectOwnAvatar(original);
+        if(cats.contains(original))return original;
+        if(cats.isEmpty() || !otherAvatarsEnabled())return original;
         List<String> available=activeCats;
         return CatSelection.choose(original,available,assigned);
     }
@@ -114,21 +122,54 @@ public final class KattenRuntime {
     }
     public static String plannerAvatar(String original) {
         try {
-            if(preferences==null || !preferences.getBoolean("enabled",true) || activeCats.isEmpty())return original;
+            if(!otherAvatarsEnabled() || activeCats.isEmpty())return original;
             return CatSelection.choose(original==null || original.trim().isEmpty()?"planner-no-photo":original,activeCats,assigned);
         } catch(RuntimeException | LinkageError error) {CrashDiagnostics.record(app,"Plannerkat kiezen mislukt",error);return original;}
+    }
+    /** Keep the source URL in host state, including flows retained on recreation. */
+    public static String rememberOwnAvatar(String original) {
+        if(original!=null && !original.isEmpty() && !cats.contains(original))ownPhotoUrls.add(original);
+        return original;
+    }
+    /** Record photo identity without putting a selected cat in retained host state. */
+    public static String rememberAvatar(String original) {
+        if(original!=null && !original.isEmpty() && !cats.contains(original))avatarPhotoUrls.add(original);
+        return original;
+    }
+    public static String displayAvatar(String original) {
+        if(Boolean.TRUE.equals(cardBinding.get()))return studentCardAvatar(original);
+        if(ownPhotoUrls.contains(original==null?"":original))return ownAvatar(original);
+        return avatarPhotoUrls.contains(original==null?"":original)?avatar(original):original;
+    }
+    public static void bindStudentCardAvatar(Object view,String original) {
+        Boolean previous=cardBinding.get();cardBinding.set(true);
+        try {view.getClass().getMethod("setAvatar",String.class).invoke(view,studentCardAvatar(original));}
+        catch(ReflectiveOperationException error) {CrashDiagnostics.record(app,"Leerlingenkaartfoto binden mislukt",error);}
+        finally {if(previous==null)cardBinding.remove();else cardBinding.set(previous);}
     }
     public static String ownAvatar(String original) {
         try { return selectOwnAvatar(original); }
         catch(RuntimeException | LinkageError error) { CrashDiagnostics.record(app,"Eigen kattenfoto kiezen mislukt",error); return original; }
     }
+    /** Own-avatar UI binding; keep User and retained header state unchanged. */
+    public static String ownUserAvatar(Object user) {
+        String original=null;
+        try {
+            original=(String)user.getClass().getMethod("getAvatarUrl").invoke(user);
+            return ownAvatar(original);
+        } catch(ReflectiveOperationException | RuntimeException | LinkageError error) {
+            CrashDiagnostics.record(app,"Eigen profielfoto binden mislukt",error);
+            return original;
+        }
+    }
     private static String selectOwnAvatar(String original) {
-        if(preferences==null || !preferences.getBoolean("enabled",true))return original;
+        if(original!=null && !original.isEmpty() && !cats.contains(original))ownPhotoUrls.add(original);
+        if(!ownAvatarEnabled())return original;
         return selectStudentCardAvatar(original);
     }
     public static String studentCardAvatar(String original) {
         try {
-            if(preferences==null || !preferences.getBoolean("student-card-enabled",false))return original;
+            if(preferences==null || !AvatarPolicy.card(preferences.getBoolean("enabled",true),preferences.getBoolean("own-enabled",true),preferences.getBoolean("student-card-enabled",false)))return original;
             return selectStudentCardAvatar(original);
         }
         catch(RuntimeException | LinkageError error) { CrashDiagnostics.record(app,"Leerlingenkaartkat kiezen mislukt",error); return original; }
@@ -210,6 +251,7 @@ public final class KattenRuntime {
     }
     /** Scope custom decoding to substituted cat URLs; preserve other image loading. */
     public static void avatarImage(ImageView view,String url,boolean option) {
+        url=displayAvatar(url);
         Activity activity=activity(view.getContext());
         if(activity!=null && cats.contains(url)) {
             roundAvatar(view);
@@ -256,12 +298,13 @@ public final class KattenRuntime {
             Class.forName("eo0").getMethod(method,types).invoke(null,values);
         } catch(ReflectiveOperationException error) {CrashDiagnostics.record(app,"Originele afbeelding laden mislukt",error);}
     }
-    public static void imageA(ImageView view,String url,boolean flag) {if(!catImage(view,url))imageFallback("a",view,url,new Class<?>[]{boolean.class},flag);}
-    public static void imageB(ImageView view,String url,Integer placeholder,boolean flag) {if(!catImage(view,url))imageFallback("b",view,url,new Class<?>[]{Integer.class,boolean.class},placeholder,flag);}
-    public static void imageC(ImageView view,String url,Integer placeholder,int flags) {if(!catImage(view,url))imageFallback("c",view,url,new Class<?>[]{Integer.class,int.class},placeholder,flags);}
-    public static void imageD(ImageView view,String url,Integer placeholder) {if(!catImage(view,url))imageFallback("d",view,url,new Class<?>[]{Integer.class},placeholder);}
+    public static void imageA(ImageView view,String url,boolean flag) {url=displayAvatar(url);if(!catImage(view,url))imageFallback("a",view,url,new Class<?>[]{boolean.class},flag);}
+    public static void imageB(ImageView view,String url,Integer placeholder,boolean flag) {url=displayAvatar(url);if(!catImage(view,url))imageFallback("b",view,url,new Class<?>[]{Integer.class,boolean.class},placeholder,flag);}
+    public static void imageC(ImageView view,String url,Integer placeholder,int flags) {url=displayAvatar(url);if(!catImage(view,url))imageFallback("c",view,url,new Class<?>[]{Integer.class,int.class},placeholder,flags);}
+    public static void imageD(ImageView view,String url,Integer placeholder) {url=displayAvatar(url);if(!catImage(view,url))imageFallback("d",view,url,new Class<?>[]{Integer.class},placeholder);}
     /** Also intercept direct loads and d94.b's default-argument delegation. */
     public static void directImage(Object loader,String url,ImageView view,Integer placeholder,boolean flag,int defaults) {
+        url=displayAvatar(url);
         if(catImage(view,url))return;
         imageRequests.remove(view);
         try {
@@ -276,7 +319,7 @@ public final class KattenRuntime {
             Class<?> type=Class.forName("kw9");
             java.lang.reflect.Field model=type.getDeclaredField("M");model.setAccessible(true);
             Object url=model.get(request);
-            if(url instanceof String && catImage(view,(String)url))return;
+            if(url instanceof String && catImage(view,displayAvatar((String)url)))return;
         } catch(ReflectiveOperationException error) {
             CrashDiagnostics.record(app,"Rechtstreekse kattenaanvraag herkennen mislukt",error);
         }
@@ -293,7 +336,7 @@ public final class KattenRuntime {
                 ImageView view=(ImageView)image.get(target);
                 java.lang.reflect.Field model=Class.forName("kw9").getDeclaredField("M");model.setAccessible(true);
                 Object url=model.get(request);
-                if(url instanceof String && catImage(view,(String)url))return;
+                if(url instanceof String && catImage(view,displayAvatar((String)url)))return;
                 imageRequests.remove(view);
             }
         } catch(ReflectiveOperationException error) {CrashDiagnostics.record(app,"Glide-kattenweergave herkennen mislukt",error);}
@@ -305,6 +348,11 @@ public final class KattenRuntime {
     }
     public static void composeImage(Object model,String description,Object modifier,Object callback,
             Object alignment,Object scale,float alpha,Object filter,Object composer,int changed,int defaults) {
+        if(model instanceof String) {
+            Object displayed=displayAvatar((String)model);
+            if(!Objects.equals(model,displayed)) {changed=(changed & ~14)|4;defaults &= ~1;}
+            model=displayed;
+        }
         ComposeImageBridge.render(model,description,modifier,callback,alignment,scale,alpha,
             filter,composer,changed,defaults,model instanceof String && cats.contains(model));
     }
@@ -317,96 +365,44 @@ public final class KattenRuntime {
     private static void saveStreak(Streak s) {
         preferences.edit().putInt("streak",s.count).putInt("best",s.best).putString("last",s.last==null?"":s.last.toString()).apply();
     }
-    /** Invoked with the original home view before R8 reuses its parameter register. */
-    public static void home(View root) {
-        if(root==null)return;
-        root.post(()->{
-            try { attachHomeStreak(root); }
-            catch(RuntimeException | LinkageError error) { CrashDiagnostics.record(app,"Streak op home plaatsen mislukt",error); }
-        });
+    private static boolean otherAvatarsEnabled() {
+        return preferences!=null && AvatarPolicy.others(preferences.getBoolean("enabled",true),preferences.getBoolean("others-enabled",true));
     }
-    private static void attachHomeStreak(View root) {
-        if(preferences==null || !preferences.getBoolean("streak-visible",true) || !root.isAttachedToWindow() || !(root.getParent() instanceof FrameLayout))return;
-        FrameLayout parent=(FrameLayout)root.getParent();
-        if(parent.findViewWithTag(HOME_TAG)!=null)return;
-        if(!(root.getLayoutParams() instanceof FrameLayout.LayoutParams))return;
-        FrameLayout.LayoutParams original=new FrameLayout.LayoutParams((FrameLayout.LayoutParams)root.getLayoutParams());
-        int height=Math.round(56*root.getResources().getDisplayMetrics().density);
-        HomeStreakView panel=new HomeStreakView(root.getContext());
-        FrameLayout.LayoutParams position=new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,height,Gravity.TOP);
-        position.topMargin=original.topMargin;
-        position.leftMargin=original.leftMargin;position.rightMargin=original.rightMargin;
-        FrameLayout.LayoutParams shifted=new FrameLayout.LayoutParams(original);
-        shifted.topMargin+=height;
-        // Reserve space rather than covering the greeting or stealing its touches.
-        root.setLayoutParams(shifted);
-        parent.addView(panel,position);
-        sampleHomeColor(root,panel,0);
-        android.view.ViewTreeObserver.OnGlobalLayoutListener visibility=()->panel.setVisibility(root.getVisibility());
-        root.getViewTreeObserver().addOnGlobalLayoutListener(visibility);
-        root.addOnAttachStateChangeListener(new View.OnAttachStateChangeListener() {
-            public void onViewAttachedToWindow(View view) { panel.update(); }
-            public void onViewDetachedFromWindow(View view) {
-                if(view.getViewTreeObserver().isAlive())view.getViewTreeObserver().removeOnGlobalLayoutListener(visibility);
-                parent.removeView(panel);view.setLayoutParams(original);view.removeOnAttachStateChangeListener(this);
-            }
-        });
+    private static boolean ownAvatarEnabled() {
+        return preferences!=null && AvatarPolicy.own(preferences.getBoolean("enabled",true),preferences.getBoolean("own-enabled",true));
     }
-    /** Sample only one background pixel locally; no screenshot is stored or shared. */
-    private static void sampleHomeColor(View root,HomeStreakView panel,int attempt) {
-        root.postDelayed(()->{
-            Activity owner=activity(root.getContext());
-            if(owner==null || owner.isDestroyed() || !root.isAttachedToWindow() || !panel.isAttachedToWindow())return;
-            int[] position=new int[2];root.getLocationInWindow(position);
-            int offset=Math.max(2,Math.round(8*root.getResources().getDisplayMetrics().density));
-            int x=position[0]+Math.max(0,root.getWidth()-offset),y=position[1]+Math.min(offset,Math.max(0,root.getHeight()-1));
-            android.graphics.Bitmap pixel=android.graphics.Bitmap.createBitmap(1,1,android.graphics.Bitmap.Config.ARGB_8888);
-            try {
-                PixelCopy.request(owner.getWindow(),new android.graphics.Rect(x,y,x+1,y+1),pixel,result->{
-                    try {
-                        if(result==PixelCopy.SUCCESS && panel.isAttachedToWindow()) {
-                            int color=pixel.getPixel(0,0);panel.setBackgroundColor(color);
-                            View homeAvatar=owner.getWindow().getDecorView().findViewById(0x7f0a037f);
-                            if(homeAvatar!=null && homeAvatar.getWidth()>0) {
-                                int[] avatarPosition=new int[2],panelPosition=new int[2];
-                                homeAvatar.getLocationInWindow(avatarPosition);panel.getLocationInWindow(panelPosition);
-                                int rightInset=Math.max(0,panelPosition[0]+panel.getWidth()-avatarPosition[0]-homeAvatar.getWidth());
-                                panel.setPadding(panel.getPaddingLeft(),0,rightInset,0);
-                            }
-                            double brightness=Color.red(color)*0.299+Color.green(color)*0.587+Color.blue(color)*0.114;
-                            panel.stats.setTextColor(brightness>145?Color.BLACK:Color.WHITE);
-                            panel.setCompletedTextColor(brightness>145?Color.BLACK:Color.WHITE);
-                        } else if(attempt<3)sampleHomeColor(root,panel,attempt+1);
-                    } finally {pixel.recycle();}
-                },new android.os.Handler(android.os.Looper.getMainLooper()));
-            } catch(RuntimeException error) {pixel.recycle();if(attempt<3)sampleHomeColor(root,panel,attempt+1);}
-        },250);
+    static boolean streakVisible() {return preferences!=null && preferences.getBoolean("streak-visible",true);}
+    public static void homeFavourites(int changed,Object composer,Object action,Object modifier,List<?> favourites) {
+        HomeSettingsBridge.favourites(changed,composer,action,modifier,favourites);
     }
-    private static final class HomeStreakView extends LinearLayout {
+    /** b15.c uses v0b.h: Open Sans 600, 13sp, 17.7sp line height. */
+    private static void styleHomePillText(TextView view) {
+        view.setTypeface(view.getResources().getFont(0x7f09000a));
+        view.setTextSize(android.util.TypedValue.COMPLEX_UNIT_SP,13);
+        view.setLetterSpacing(0f);view.setIncludeFontPadding(false);
+        float lineHeight=android.util.TypedValue.applyDimension(android.util.TypedValue.COMPLEX_UNIT_SP,17.7f,view.getResources().getDisplayMetrics());
+        view.setLineSpacing(lineHeight-view.getPaint().getFontSpacing(),1f);
+    }
+    static final class HomeStreakView extends LinearLayout {
         final TextView stats;
-        final Button checkIn;
-        final GradientDrawable completed=new GradientDrawable();
-        final boolean dark;
+        final TextView checkIn;
         HomeStreakView(Context context) {
-            super(context);setTag(HOME_TAG);setOrientation(HORIZONTAL);setGravity(Gravity.CENTER_VERTICAL);
+            super(context);setTag(HOME_TAG);setOrientation(HORIZONTAL);setGravity(Gravity.CENTER);
             int padding=Math.round(12*getResources().getDisplayMetrics().density);setPadding(padding,0,padding,0);
-            setBackgroundColor(Color.TRANSPARENT);
-            dark=(getResources().getConfiguration().uiMode & android.content.res.Configuration.UI_MODE_NIGHT_MASK)==android.content.res.Configuration.UI_MODE_NIGHT_YES;
-            stats=new TextView(context);stats.setTextSize(14);stats.setTextColor(context.getColor(dark?android.R.color.system_neutral1_50:android.R.color.system_neutral1_900));
-            addView(stats,new LinearLayout.LayoutParams(0,ViewGroup.LayoutParams.WRAP_CONTENT,1));
-            checkIn=new Button(context);checkIn.setTextSize(14);checkIn.setAllCaps(false);checkIn.setTypeface(android.graphics.Typeface.create("sans-serif-medium",android.graphics.Typeface.NORMAL));
+            GradientDrawable tile=new GradientDrawable();tile.setColor(context.getColor(0x7f060040));
+            tile.setCornerRadius(24*getResources().getDisplayMetrics().density);
+            setBackground(new RippleDrawable(android.content.res.ColorStateList.valueOf(0x22000000),tile,null));
+            setFocusable(true);setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_YES);
+            stats=new TextView(context);styleHomePillText(stats);stats.setTextColor(context.getColor(0x7f0609cf));
+            stats.setGravity(Gravity.CENTER);addView(stats,new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT,ViewGroup.LayoutParams.WRAP_CONTENT));
+            checkIn=new TextView(context);styleHomePillText(checkIn);checkIn.setGravity(Gravity.CENTER);
             float density=getResources().getDisplayMetrics().density;
             checkIn.setMinHeight(Math.round(48*density));
-            checkIn.setBackgroundTintList(null);
-            GradientDrawable active=new GradientDrawable();active.setColor(Color.WHITE);active.setCornerRadius(24*density);
-            completed.setColor(Color.TRANSPARENT);completed.setCornerRadius(16*density);
-            StateListDrawable states=new StateListDrawable();
-            states.addState(new int[]{-android.R.attr.state_enabled},new InsetDrawable(completed,0,Math.round(8*density),0,Math.round(8*density)));
-            states.addState(new int[]{},active);
-            checkIn.setBackground(new RippleDrawable(android.content.res.ColorStateList.valueOf(0x22000000),states,null));
             checkIn.setPadding(Math.round(20*density),0,Math.round(20*density),0);
-            setCompletedTextColor(dark?Color.WHITE:Color.BLACK);
-            checkIn.setOnClickListener(v->{
+            checkIn.setTextColor(context.getColor(0x7f0609cf));
+            stats.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
+            checkIn.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
+            setOnClickListener(v->{
                 Streak streak=readStreak();LocalDate today=LocalDate.now();
                 if(!today.equals(streak.last)) {
                     saveStreak(streak.click(today));
@@ -417,17 +413,12 @@ public final class KattenRuntime {
             addView(checkIn,new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT,Math.round(48*density)));
             update();
         }
-        void setCompletedTextColor(int color) {
-            checkIn.setTextColor(new android.content.res.ColorStateList(
-                new int[][]{new int[]{-android.R.attr.state_enabled},new int[]{}},
-                new int[]{color,Color.BLACK}));
-        }
         void update() {
             Streak streak=readStreak();saveStreak(streak);
             stats.setText("🔥 "+streak.count+" dagen  ·  🏆 "+streak.best);
             boolean checkedIn=LocalDate.now().equals(streak.last);
-            checkIn.setText(checkedIn?"Kom morgen terug":"🐾 Aai de kat");checkIn.setEnabled(!checkedIn);
-            stats.setContentDescription("Streak: "+streak.count+" dagen. Record: "+streak.best+" dagen.");
+            checkIn.setText(checkedIn?"Kom morgen terug":"🐾 Aai de kat");setEnabled(!checkedIn);
+            setContentDescription("Streak: "+streak.count+" dagen. Record: "+streak.best+" dagen. "+checkIn.getText());
         }
     }
     private static void showMenu(Activity activity) {
@@ -447,21 +438,41 @@ public final class KattenRuntime {
         LinearLayout body=new LinearLayout(activity);body.setOrientation(LinearLayout.VERTICAL);body.setPadding(dp(activity,24),dp(activity,20),dp(activity,24),dp(activity,16));
         GradientDrawable panel=new GradientDrawable();panel.setColor(surface);panel.setCornerRadius(dp(activity,28));body.setBackground(panel);body.setClipToOutline(true);
         TextView title=text(activity,"Smartschool Katten",24);title.setTextColor(textColor);title.setTypeface(android.graphics.Typeface.create("sans-serif-medium",0));body.addView(title);
-        Switch enabled=new Switch(activity);enabled.setText("Kattenprofielfoto’s");enabled.setTextColor(textColor);enabled.setPadding(0,dp(activity,12),0,dp(activity,12));enabled.setChecked(preferences.getBoolean("enabled",true));
-        int[][] switchStates={new int[]{android.R.attr.state_checked},new int[]{}};
-        enabled.setThumbTintList(new android.content.res.ColorStateList(switchStates,new int[]{accent,textColor}));
-        enabled.setOnCheckedChangeListener((button,on)->preferences.edit().putBoolean("enabled",on).apply());body.addView(enabled);
-        Switch studentCard=new Switch(activity);studentCard.setText("Kat op leerlingenkaart");studentCard.setTextColor(textColor);
-        studentCard.setPadding(0,0,0,dp(activity,12));studentCard.setChecked(preferences.getBoolean("student-card-enabled",false));
-        studentCard.setThumbTintList(new android.content.res.ColorStateList(switchStates,new int[]{accent,textColor}));
-        studentCard.setOnCheckedChangeListener((button,on)->preferences.edit().putBoolean("student-card-enabled",on).apply());body.addView(studentCard);
-        Switch streakVisible=new Switch(activity);streakVisible.setText("Streakbalk");streakVisible.setTextColor(textColor);
-        streakVisible.setPadding(0,0,0,dp(activity,12));streakVisible.setChecked(preferences.getBoolean("streak-visible",true));
-        streakVisible.setThumbTintList(new android.content.res.ColorStateList(switchStates,new int[]{accent,textColor}));
-        streakVisible.setOnCheckedChangeListener((button,on)->preferences.edit().putBoolean("streak-visible",on).apply());body.addView(streakVisible);
-        TextView heading=text(activity,"Je favoriete kat",18);heading.setTextColor(textColor);heading.setTypeface(android.graphics.Typeface.create("sans-serif-medium",0));body.addView(heading);
-        TextView hint=text(activity,"Tik op een kat voor je eigen profielfoto.",14);hint.setTextColor(textColor);body.addView(hint);
-        TextView disableHint=text(activity,"Druk lang om een kat uit te schakelen.",12);disableHint.setTextColor(textColor);disableHint.setAlpha(0.65f);body.addView(disableHint);
+        LinearLayout tabs=new LinearLayout(activity);
+        Button generalTab=menuButton(activity,"Algemeen",accent,dark?Color.BLACK:Color.WHITE);
+        Button experimentalTab=menuButton(activity,"Experimenteel",surface,textColor);
+        tabs.addView(generalTab,new LinearLayout.LayoutParams(0,dp(activity,48),1));
+        tabs.addView(experimentalTab,new LinearLayout.LayoutParams(0,dp(activity,48),1));
+        body.addView(tabs);
+        LinearLayout general=new LinearLayout(activity);general.setOrientation(LinearLayout.VERTICAL);body.addView(general);
+        LinearLayout experimental=new LinearLayout(activity);experimental.setOrientation(LinearLayout.VERTICAL);experimental.setVisibility(View.GONE);body.addView(experimental);
+        TextView experimentalHint=text(activity,"Deze opties veranderen alleen de weergave op dit toestel, niet de toestemming van je school.",14);
+        experimentalHint.setTextColor(textColor);experimentalHint.setPadding(0,dp(activity,16),0,dp(activity,8));experimental.addView(experimentalHint);
+        Switch leaveSchool=settingSwitch(activity,experimental,"‘Mag school verlaten’ als JA tonen",textColor,accent);
+        leaveSchool.setChecked(preferences.getBoolean("experimental-leave-school",false));
+        leaveSchool.setOnCheckedChangeListener((button,on)->preferences.edit().putBoolean("experimental-leave-school",on).apply());
+        generalTab.setOnClickListener(v->{general.setVisibility(View.VISIBLE);experimental.setVisibility(View.GONE);generalTab.setBackgroundTintList(android.content.res.ColorStateList.valueOf(accent));experimentalTab.setBackgroundTintList(android.content.res.ColorStateList.valueOf(surface));generalTab.setTextColor(dark?Color.BLACK:Color.WHITE);experimentalTab.setTextColor(textColor);});
+        experimentalTab.setOnClickListener(v->{general.setVisibility(View.GONE);experimental.setVisibility(View.VISIBLE);experimentalTab.setBackgroundTintList(android.content.res.ColorStateList.valueOf(accent));generalTab.setBackgroundTintList(android.content.res.ColorStateList.valueOf(surface));experimentalTab.setTextColor(dark?Color.BLACK:Color.WHITE);generalTab.setTextColor(textColor);});
+        Switch enabled=settingSwitch(activity,general,"Kattenprofielfoto’s",textColor,accent);
+        enabled.setChecked(preferences.getBoolean("enabled",true));
+        Switch others=settingSwitch(activity,general,"Kattenfoto’s van anderen",textColor,accent);
+        others.setChecked(preferences.getBoolean("others-enabled",true));
+        others.setOnCheckedChangeListener((button,on)->preferences.edit().putBoolean("others-enabled",on).apply());
+        Switch own=settingSwitch(activity,general,"Je eigen kattenfoto",textColor,accent);
+        own.setChecked(preferences.getBoolean("own-enabled",true));
+        own.setOnCheckedChangeListener((button,on)->preferences.edit().putBoolean("own-enabled",on).apply());
+        Switch studentCard=settingSwitch(activity,general,"Kat op leerlingenkaart",textColor,accent);
+        studentCard.setChecked(preferences.getBoolean("student-card-enabled",false));
+        studentCard.setOnCheckedChangeListener((button,on)->preferences.edit().putBoolean("student-card-enabled",on).apply());
+        Switch streakVisible=settingSwitch(activity,general,"Streakbalk",textColor,accent);
+        streakVisible.setChecked(preferences.getBoolean("streak-visible",true));
+        streakVisible.setOnCheckedChangeListener((button,on)->preferences.edit().putBoolean("streak-visible",on).apply());
+        Button updates=menuButton(activity,"Controleren op updates",surface,textColor);
+        updates.setOnClickListener(v->AppUpdates.check(activity,true));
+        general.addView(updates,new LinearLayout.LayoutParams(-1,dp(activity,48)));
+        TextView heading=text(activity,"Je favoriete kat",18);heading.setTextColor(textColor);heading.setTypeface(android.graphics.Typeface.create("sans-serif-medium",0));general.addView(heading);
+        TextView hint=text(activity,"Tik op een kat voor je eigen profielfoto.",14);hint.setTextColor(textColor);general.addView(hint);
+        TextView disableHint=text(activity,"Druk lang om een kat uit te schakelen.",12);disableHint.setTextColor(textColor);disableHint.setAlpha(0.65f);general.addView(disableHint);
         int menuWidth=Math.min(activity.getResources().getDisplayMetrics().widthPixels-dp(activity,32),dp(activity,420));
         int photoSize=Math.max(1,(menuWidth-dp(activity,48))/4-dp(activity,8));
         int cellHeight=photoSize+dp(activity,8);
@@ -498,7 +509,11 @@ public final class KattenRuntime {
             upload.setBackgroundTintList(android.content.res.ColorStateList.valueOf(deleting[0]?0xff1976d2:upload.isEnabled()?accent:gray));
             upload.setTextColor(deleting[0]?Color.WHITE:dark?Color.BLACK:Color.WHITE);
             delete.setTextColor(customCats.count()==0?textColor:dark?Color.BLACK:Color.WHITE);
-            enabled.setEnabled(!deleting[0]);studentCard.setEnabled(!deleting[0]);streakVisible.setEnabled(!deleting[0]);heading.setAlpha(deleting[0]?0.4f:1f);
+            enabled.setEnabled(!deleting[0]);
+            setSettingEnabled(others,!deleting[0] && enabled.isChecked());
+            setSettingEnabled(own,!deleting[0] && enabled.isChecked());
+            setSettingEnabled(studentCard,!deleting[0] && enabled.isChecked() && own.isChecked());
+            streakVisible.setEnabled(!deleting[0]);heading.setAlpha(deleting[0]?0.4f:1f);
             hint.setText(deleting[0]?"Selecteer de uploads die je wilt verwijderen.":"Tik op een kat voor je eigen profielfoto.");
             disableHint.setAlpha(deleting[0]?0.25f:0.65f);
             close.setEnabled(!deleting[0]);
@@ -506,6 +521,8 @@ public final class KattenRuntime {
             close.setBackgroundTintList(android.content.res.ColorStateList.valueOf(deleting[0]?gray:accent));
             dialog.setCancelable(!deleting[0]);dialog.setCanceledOnTouchOutside(!deleting[0]);
         };
+        enabled.setOnCheckedChangeListener((button,on)->{preferences.edit().putBoolean("enabled",on).apply();selection.run();});
+        own.setOnCheckedChangeListener((button,on)->{preferences.edit().putBoolean("own-enabled",on).apply();selection.run();});
         LinearLayout row=null;
         for(int index=0;index<cats.size();index++) {
             if(index%4==0){row=new LinearLayout(activity);gallery.addView(row,new LinearLayout.LayoutParams(-1,-2));}
@@ -528,7 +545,7 @@ public final class KattenRuntime {
             for(int missing=cats.size()%4;missing<4;missing++)
                 row.addView(new View(activity),new LinearLayout.LayoutParams(0,cellHeight,1));
         }
-        body.addView(gallery);
+        general.addView(gallery);
         int customCount=customCats.count();
         upload.setOnClickListener(v->{
             if(deleting[0]) {deleting[0]=false;selectedUploads.clear();selection.run();return;}
@@ -563,10 +580,10 @@ public final class KattenRuntime {
         LinearLayout actions=new LinearLayout(activity);
         LinearLayout.LayoutParams uploadLayout=new LinearLayout.LayoutParams(0,dp(activity,48),1);uploadLayout.setMarginEnd(dp(activity,8));
         actions.addView(upload,uploadLayout);actions.addView(delete,new LinearLayout.LayoutParams(0,dp(activity,48),1));
-        LinearLayout.LayoutParams actionsLayout=new LinearLayout.LayoutParams(-1,-2);actionsLayout.topMargin=dp(activity,8);body.addView(actions,actionsLayout);
+        LinearLayout.LayoutParams actionsLayout=new LinearLayout.LayoutParams(-1,-2);actionsLayout.topMargin=dp(activity,8);general.addView(actions,actionsLayout);
         TextView uploadCount=text(activity,"("+customCount+"/"+CustomCatStore.LIMIT+")",12);
         uploadCount.setTextColor(textColor);uploadCount.setAlpha(0.65f);uploadCount.setGravity(Gravity.START);
-        body.addView(uploadCount,new LinearLayout.LayoutParams(-1,-2));
+        general.addView(uploadCount,new LinearLayout.LayoutParams(-1,-2));
         close.setOnClickListener(v->dialog.dismiss());
         selection.run();
         LinearLayout.LayoutParams closeLayout=new LinearLayout.LayoutParams(-1,dp(activity,48));closeLayout.topMargin=dp(activity,8);body.addView(close,closeLayout);
@@ -576,6 +593,34 @@ public final class KattenRuntime {
         if(window!=null) {
             window.setLayout(menuWidth,WindowManager.LayoutParams.WRAP_CONTENT);
             scroll.getLayoutParams().height=Math.min(dp(activity,640),(int)(activity.getResources().getDisplayMetrics().heightPixels*0.8));scroll.requestLayout();
+        }
+    }
+    private static void setSettingEnabled(Switch control,boolean enabled) {
+        control.setEnabled(enabled);
+        View row=(View)control.getParent();row.setAlpha(enabled?1f:0.4f);
+        if(row instanceof ViewGroup)((ViewGroup)row).getChildAt(0).setEnabled(enabled);
+    }
+    private static Switch settingSwitch(Activity activity,LinearLayout parent,String label,int textColor,int accent) {
+        LinearLayout row=new LinearLayout(activity);row.setGravity(Gravity.CENTER_VERTICAL);
+        row.setMinimumHeight(dp(activity,56));row.setPadding(0,dp(activity,8),0,dp(activity,8));row.setClipChildren(false);row.setClipToPadding(false);
+        TextView caption=text(activity,label,16);caption.setTextColor(textColor);caption.setPadding(0,0,dp(activity,12),0);
+        row.addView(caption,new LinearLayout.LayoutParams(0,-2,1));
+        Switch control=new Switch(activity);control.setText("");control.setContentDescription(label);
+        control.setShowText(false);control.setSwitchMinWidth(dp(activity,52));control.setPadding(dp(activity,4),dp(activity,4),dp(activity,4),dp(activity,4));
+        control.setThumbTintList(new android.content.res.ColorStateList(new int[][]{new int[]{android.R.attr.state_checked},new int[]{}},new int[]{accent,textColor}));
+        row.addView(control,new LinearLayout.LayoutParams(-2,-2));caption.setOnClickListener(v->{if(control.isEnabled())control.toggle();});
+        parent.addView(row,new LinearLayout.LayoutParams(-1,-2));return control;
+    }
+    /** Only the own-card UI calls this; leave the server's model untouched. */
+    public static String studentCardInformation(Object information) {
+        String original=null;
+        try {
+            Class<?> type=Class.forName("be.smartschool.mobile.network.services.ProfileInformation");
+            original=(String)type.getMethod("getContent").invoke(information);
+            String title=(String)type.getMethod("getTitle").invoke(information);
+            return StudentCardDisplay.content(title,original,preferences!=null && preferences.getBoolean("experimental-leave-school",false));
+        } catch(ReflectiveOperationException | RuntimeException | LinkageError error) {
+            CrashDiagnostics.record(app,"Leerlingenkaartinformatie aanpassen mislukt",error);return original;
         }
     }
     private static Button menuButton(Activity activity,String label,int background,int textColor) {

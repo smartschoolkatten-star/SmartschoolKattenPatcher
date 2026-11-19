@@ -20,7 +20,7 @@ import java.util.zip.*;
 /** A local, version-specific APK patch. No upload of the source APK is needed. */
 public final class KattenPatcher {
     public static final String PACKAGE = "be.smartschoolkatten.mobile";
-    public static final int PATCH_REVISION = 38;
+    public static final int PATCH_REVISION = 45;
     private static final String ORIGINAL = "be.smartschool.mobile";
     private static final String RUNTIME = "Lbe/smartschoolkatten/runtime/KattenRuntime;";
     public interface Progress {
@@ -179,10 +179,7 @@ public final class KattenPatcher {
                     methods.add(new ImmutableMethod(method.getDefiningClass(),method.getName(),method.getParameters(),method.getReturnType(),method.getAccessFlags(),method.getAnnotations(),method.getHiddenApiRestrictions(),disabled));
                     classChanged=true; continue;
                 }
-                boolean homeView=cls.getType().equals("Lbe/smartschool/mobile/modules/home/presentation/HomeFragment;")
-                    && method.getName().equals("D0") && method.getReturnType().equals("V")
-                    && method.getParameterTypes().equals(Arrays.asList("Landroid/view/View;","Landroid/os/Bundle;"));
-                boolean needsEdit=homeView || cls.getType().equals("Lbe/smartschool/mobile/Application;") && method.getName().equals("onCreate");
+                boolean needsEdit=cls.getType().equals("Lbe/smartschool/mobile/Application;") && method.getName().equals("onCreate");
                 if(!needsEdit) for(Instruction instruction:implementation.getInstructions()) {
                     if(!(instruction instanceof ReferenceInstruction))continue;
                     Reference reference=((ReferenceInstruction)instruction).getReference();
@@ -212,9 +209,7 @@ public final class KattenPatcher {
                             FieldReference field=(FieldReference)reference;
                             if(avatarMethod(method) && isAvatarField(field)) {
                                 int register=((OneRegisterInstruction)instruction).getRegisterA();
-                                String action=field.getDefiningClass().startsWith("Lbe/smartschool/mobile/modules/planner/")?"plannerAvatar":
-                                    field.getDefiningClass().equals("Lgac;")?"studentCardAvatar":
-                                    field.getDefiningClass().equals("Lbe/smartschool/mobile/model/User;")?"ownAvatar":"avatar";
+                                String action=field.getDefiningClass().equals("Lbe/smartschool/mobile/model/User;")?"rememberOwnAvatar":"rememberAvatar";
                                 ImmutableMethodReference hook=new ImmutableMethodReference(RUNTIME,action,Collections.singletonList("Ljava/lang/String;"),"Ljava/lang/String;");
                                 body.addInstruction(i+1,new BuilderInstruction3rc(Opcode.INVOKE_STATIC_RANGE,register,1,hook));
                                 body.addInstruction(i+2,new BuilderInstruction11x(Opcode.MOVE_RESULT_OBJECT,register));
@@ -230,11 +225,6 @@ public final class KattenPatcher {
                             }
                         }
                     }
-                }
-                if(homeView) {
-                    body.addInstruction(0,new BuilderInstruction3rc(Opcode.INVOKE_STATIC_RANGE,implementation.getRegisterCount()-2,1,
-                        new ImmutableMethodReference(RUNTIME,"home",Collections.singletonList("Landroid/view/View;"),"V")));
-                    changed=true;
                 }
                 if(cls.getType().equals("Lbe/smartschool/mobile/Application;") && method.getName().equals("onCreate")) {
                     // R8 reuses p0 as a String/Throwable on some exit paths. Only
@@ -264,6 +254,27 @@ public final class KattenPatcher {
     private static MethodReference replacementCall(ClassDef cls,Method method,Reference reference) {
         if(!(reference instanceof MethodReference) || cls.getType().startsWith("Lly/img/"))return null;
         MethodReference call=(MethodReference)reference;
+        if(cls.getType().equals("Ldac;") && call.getDefiningClass().equals("Lbe/smartschool/mobile/modules/usercard/UserCardProfileView;")
+            && call.getName().equals("setAvatar") && call.getReturnType().equals("V")
+            && call.getParameterTypes().equals(Collections.singletonList("Ljava/lang/String;")))
+            return new ImmutableMethodReference(RUNTIME,"bindStudentCardAvatar",Arrays.asList("Ljava/lang/Object;","Ljava/lang/String;"),"V");
+        // Resolve the own photo at UI binding, before null/empty placeholder
+        // checks. Registering a URL alone cannot cover an account without a photo.
+        if(((cls.getType().equals("Lm66;") && method.getName().equals("h"))
+            || (cls.getType().equals("Lbe/smartschool/mobile/modules/home/presentation/HomeFragment;") && method.getName().equals("d1")))
+            && call.getDefiningClass().equals("Lbe/smartschool/mobile/model/User;")
+            && call.getName().equals("getAvatarUrl") && call.getParameterTypes().isEmpty()
+            && call.getReturnType().equals("Ljava/lang/String;"))
+            return new ImmutableMethodReference(RUNTIME,"ownUserAvatar",Collections.singletonList("Ljava/lang/Object;"),"Ljava/lang/String;");
+        if(cls.getType().equals("Lb15;") && method.getName().equals("d")
+            && call.getDefiningClass().equals("Lb15;") && call.getName().equals("b")
+            && call.getReturnType().equals("V") && call.getParameterTypes().equals(Arrays.asList("I","Ldm1;","Lb34;","Lhx6;","Ljava/util/List;")))
+            return new ImmutableMethodReference(RUNTIME,"homeFavourites",Arrays.asList("I","Ljava/lang/Object;","Ljava/lang/Object;","Ljava/lang/Object;","Ljava/util/List;"),"V");
+        if(cls.getType().equals("Ldac;") && method.getName().equals("a")
+            && call.getDefiningClass().equals("Lbe/smartschool/mobile/network/services/ProfileInformation;")
+            && call.getName().equals("getContent") && call.getReturnType().equals("Ljava/lang/String;")
+            && call.getParameterTypes().isEmpty())
+            return new ImmutableMethodReference(RUNTIME,"studentCardInformation",Collections.singletonList("Ljava/lang/Object;"),"Ljava/lang/String;");
         if(call.getDefiningClass().equals("Lo26;") && call.getName().equals("P")
             && call.getReturnType().equals("V") && call.getParameterTypes().equals(Arrays.asList("Lbe/smartschool/mobile/ui/components/header/SmscHeader;","Lbe/smartschool/mobile/components/quicksearch/data/QuickSearchGraphic;")))
             return new ImmutableMethodReference(RUNTIME,"plannerHeader",Arrays.asList("Ljava/lang/Object;","Ljava/lang/Object;"),"V");
@@ -297,13 +308,17 @@ public final class KattenPatcher {
     private static boolean isAvatarField(FieldReference field) {
         String name=field.getName().toLowerCase(Locale.ROOT);
         if(!field.getType().equals("Ljava/lang/String;"))return false;
+        // Shared API data must retain the real photograph. Replacing this getter
+        // puts a random cat in UserCardState before the independent card toggle
+        // and favorite are applied, and also contaminates scanner state.
+        if(field.getDefiningClass().equals("Lbe/smartschool/mobile/network/services/UserCardInfo;"))return false;
         // Verified against 12.3.0 data-class toString() labels: Avatar.avatar,
         // PupilUiModel.avatarUrl, and SmscPillModel.iconLeftAvatarUrl.
         if(field.getDefiningClass().equals("Lik0;") && field.getName().equals("a"))return true;
         if(field.getDefiningClass().equals("Ldi9;") && field.getName().equals("e"))return true;
         if(field.getDefiningClass().equals("Lnza;") && field.getName().equals("c"))return true;
         // UserCardState.userPictureUrl: own student card, separate from other pupil cards.
-        if(field.getDefiningClass().equals("Lgac;") && field.getName().equals("a"))return true;
+        if(field.getDefiningClass().equals("Lgac;"))return false;
         // Planner participants/calendars and results Feedback.teacher use pictureUrl.
         if(name.equals("pictureurl") && (field.getDefiningClass().startsWith("Lbe/smartschool/mobile/modules/planner/")
             || field.getDefiningClass().equals("Lbe/smartschool/mobile/model/ApiUser;")))return true;
