@@ -9,6 +9,7 @@ import org.gradle.api.tasks.Optional
 import org.gradle.api.tasks.OutputDirectory
 import org.gradle.api.tasks.TaskAction
 import org.gradle.process.ExecOperations
+import java.io.File
 import java.util.Properties
 import javax.inject.Inject
 
@@ -35,7 +36,7 @@ android {
     }
     sourceSets {
         getByName("main") {
-            java.setSrcDirs(listOf("../patch-runtime/src"))
+            java.directories.add("../patch-runtime/src")
         }
     }
     compileOptions {
@@ -51,6 +52,7 @@ abstract class BuildKattenApk @Inject constructor(private val commands: ExecOper
     @get:Input abstract val mode: Property<String>
     @get:Input @get:Optional abstract val signingDirectory: Property<String>
     @get:Internal abstract val checkout: DirectoryProperty
+    @get:InputDirectory abstract val packagedApk: DirectoryProperty
     @get:OutputDirectory abstract val apkDirectory: DirectoryProperty
 
     @TaskAction fun build() {
@@ -73,7 +75,7 @@ abstract class VerifyStudioApk : DefaultTask() {
     @TaskAction fun verify() {
         val built = checkNotNull(artifactsLoader.get().load(apkDirectory.get())) { "Android Studio kan de APK-uitvoer niet lezen." }
         check(built.applicationId == applicationId.get()) { "Android Studio zou de verkeerde app installeren." }
-        check(built.elements.size == 1 && built.elements.all { java.io.File(it.outputFile).isFile }) { "De installeerbare kattenapp ontbreekt." }
+        check(built.elements.size == 1 && built.elements.all { File(it.outputFile).isFile }) { "De installeerbare kattenapp ontbreekt." }
         logger.lifecycle("Android Studio APK gecontroleerd: ${built.applicationId}")
     }
 }
@@ -96,9 +98,13 @@ androidComponents.onVariants { variant ->
         inputs.dir(rootProject.file("assets/branding"))
         inputs.file(rootProject.file("docs/extension-assets.json"))
     }
-    variant.artifacts.use(producer).wiredWith(BuildKattenApk::apkDirectory).toCreate(SingleArtifact.APK)
+    variant.artifacts.use(producer)
+        .wiredWithDirectories(BuildKattenApk::packagedApk, BuildKattenApk::apkDirectory)
+        .toTransform(SingleArtifact.APK)
     // Studio's APK listing redirect uses the conventional output location.
     producer.configure { apkDirectory.set(layout.buildDirectory.dir("outputs/apk/${variant.name}")) }
+    tasks.matching { it.name == "create${variant.name.replaceFirstChar { it.uppercase() }}ApkListingFileRedirect" }
+        .configureEach { dependsOn(producer) }
     tasks.register<VerifyStudioApk>("verify${variant.name.replaceFirstChar { it.uppercase() }}StudioApk") {
         apkDirectory.set(variant.artifacts.get(SingleArtifact.APK))
         applicationId.set(variant.applicationId)
