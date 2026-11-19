@@ -9,7 +9,11 @@
     const response = await fetch("https://api.github.com/repos/smartschoolkatten-star/SmartschoolKattenPatcher/releases/latest", {
       headers: { Accept: "application/vnd.github+json" }, signal: controller.signal
     });
-    if (response.status === 404) return;
+    if (response.status === 404) {
+      status.textContent = "Er is momenteel geen APK beschikbaar.";
+      button.textContent = "Nog niet beschikbaar";
+      return;
+    }
     if (!response.ok) throw new Error("Release unavailable");
     const release = await response.json();
     if (release.draft || release.prerelease || !/^katten-r[1-9][0-9]{0,5}$/.test(release.tag_name)) return;
