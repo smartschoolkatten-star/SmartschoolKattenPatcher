@@ -1,4 +1,5 @@
 import com.android.build.api.artifact.SingleArtifact
+import com.android.build.api.artifact.ArtifactTransformationRequest
 import com.android.build.api.variant.BuiltArtifactsLoader
 import org.gradle.api.file.DirectoryProperty
 import org.gradle.api.provider.Property
@@ -54,6 +55,7 @@ abstract class BuildKattenApk @Inject constructor(private val commands: ExecOper
     @get:Internal abstract val checkout: DirectoryProperty
     @get:InputDirectory abstract val packagedApk: DirectoryProperty
     @get:OutputDirectory abstract val apkDirectory: DirectoryProperty
+    @get:Internal abstract val transformation: Property<ArtifactTransformationRequest<BuildKattenApk>>
 
     @TaskAction fun build() {
         val command = mutableListOf("python3", checkout.file("tools/build-apk.py").get().asFile.absolutePath,
@@ -65,6 +67,8 @@ abstract class BuildKattenApk @Inject constructor(private val commands: ExecOper
             command += listOf("--signing-dir", signingDirectory.get())
         }
         commands.exec { workingDir(checkout.get().asFile); commandLine(command) }
+        val name = if (mode.get() == "debug") "Smartschool-Katten-test.apk" else "Smartschool-Katten.apk"
+        transformation.get().submit(this) { apkDirectory.file(name).get().asFile }
     }
 }
 
@@ -98,11 +102,10 @@ androidComponents.onVariants { variant ->
         inputs.dir(rootProject.file("assets/branding"))
         inputs.file(rootProject.file("docs/extension-assets.json"))
     }
-    variant.artifacts.use(producer)
+    val apkTransformation = variant.artifacts.use(producer)
         .wiredWithDirectories(BuildKattenApk::packagedApk, BuildKattenApk::apkDirectory)
-        .toTransform(SingleArtifact.APK)
-    // Studio's APK listing redirect uses the conventional output location.
-    producer.configure { apkDirectory.set(layout.buildDirectory.dir("outputs/apk/${variant.name}")) }
+        .toTransformMany(SingleArtifact.APK)
+    producer.configure { transformation.set(apkTransformation) }
     tasks.matching { it.name == "create${variant.name.replaceFirstChar { it.uppercase() }}ApkListingFileRedirect" }
         .configureEach { dependsOn(producer) }
     tasks.register<VerifyStudioApk>("verify${variant.name.replaceFirstChar { it.uppercase() }}StudioApk") {
