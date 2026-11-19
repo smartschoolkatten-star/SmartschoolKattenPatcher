@@ -36,11 +36,11 @@ jobs:
           path: build/standalone-apk/debug-signing
           key: katten-isolated-test-identity-v1
       - name: Volledige APK bouwen voor tests
-        run: ./gradlew :app:assembleDebug :app:verifyDebugStudioApk --no-configuration-cache
+        run: python3 tools/build-apk.py --java-home "$JAVA_HOME" --sdk "$ANDROID_HOME" --debug-test
       - uses: actions/upload-artifact@v4
         with:
           name: Smartschool-Katten-test
-          path: standalone/build/**/Smartschool-Katten-test.apk*
+          path: artifacts/apk-release/*
           if-no-files-found: error
           retention-days: 7
 
