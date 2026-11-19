@@ -1,7 +1,9 @@
 import com.android.build.api.artifact.SingleArtifact
+import com.android.build.api.variant.BuiltArtifactsLoader
 import org.gradle.api.file.DirectoryProperty
 import org.gradle.api.provider.Property
 import org.gradle.api.tasks.Input
+import org.gradle.api.tasks.InputDirectory
 import org.gradle.api.tasks.Internal
 import org.gradle.api.tasks.Optional
 import org.gradle.api.tasks.OutputDirectory
@@ -64,6 +66,18 @@ abstract class BuildKattenApk @Inject constructor(private val commands: ExecOper
     }
 }
 
+abstract class VerifyStudioApk : DefaultTask() {
+    @get:InputDirectory abstract val apkDirectory: DirectoryProperty
+    @get:Input abstract val applicationId: Property<String>
+    @get:Internal abstract val artifactsLoader: Property<BuiltArtifactsLoader>
+    @TaskAction fun verify() {
+        val built = checkNotNull(artifactsLoader.get().load(apkDirectory.get())) { "Android Studio kan de APK-uitvoer niet lezen." }
+        check(built.applicationId == applicationId.get()) { "Android Studio zou de verkeerde app installeren." }
+        check(built.elements.size == 1 && built.elements.all { java.io.File(it.outputFile).isFile }) { "De installeerbare kattenapp ontbreekt." }
+        logger.lifecycle("Android Studio APK gecontroleerd: ${built.applicationId}")
+    }
+}
+
 val sdkProperties = Properties()
 rootProject.file("local.properties").takeIf { it.isFile }?.inputStream()?.use { sdkProperties.load(it) }
 val androidSdkPath = sdkProperties.getProperty("sdk.dir") ?: System.getenv("ANDROID_HOME")
@@ -83,4 +97,11 @@ androidComponents.onVariants { variant ->
         inputs.file(rootProject.file("docs/extension-assets.json"))
     }
     variant.artifacts.use(producer).wiredWith(BuildKattenApk::apkDirectory).toCreate(SingleArtifact.APK)
+    // Studio's APK listing redirect uses the conventional output location.
+    producer.configure { apkDirectory.set(layout.buildDirectory.dir("outputs/apk/${variant.name}")) }
+    tasks.register<VerifyStudioApk>("verify${variant.name.replaceFirstChar { it.uppercase() }}StudioApk") {
+        apkDirectory.set(variant.artifacts.get(SingleArtifact.APK))
+        applicationId.set(variant.applicationId)
+        artifactsLoader.set(variant.artifacts.getBuiltArtifactsLoader())
+    }
 }
