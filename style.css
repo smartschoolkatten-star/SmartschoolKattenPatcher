@@ -1,0 +1,23 @@
+:root { color-scheme: light dark; --paper: #fff; --ink: #202020; --muted: #606060; --line: #dedede; }
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--paper); color: var(--ink); font: 1rem/1.6 system-ui, sans-serif; }
+main { max-width: 48rem; margin: 0 auto; padding: 5rem 1.5rem 2rem; }
+header { margin-bottom: 3rem; }
+header img { display: block; border-radius: .65rem; margin-bottom: 1.25rem; }
+h1 { margin: 0; font-size: clamp(1.8rem, 5vw, 2.3rem); line-height: 1.2; letter-spacing: -.035em; font-weight: 650; }
+header p { margin: .65rem 0 0; color: var(--muted); }
+article { display: flex; align-items: center; justify-content: space-between; gap: 1.5rem; padding: 1.6rem 0; border-top: 1px solid var(--line); }
+article:last-child { border-bottom: 1px solid var(--line); }
+h2 { margin: 0; font-size: 1.1rem; font-weight: 600; }
+article p { margin: .2rem 0 0; color: var(--muted); }
+a { color: inherit; text-underline-offset: .2em; }
+.download { flex-shrink: 0; display: inline-block; min-height: 2.75rem; padding: .55rem .9rem; border: 1px solid var(--ink); border-radius: .35rem; font-size: .9rem; font-weight: 550; text-align: center; text-decoration: none; }
+.download[href]:hover { background: var(--ink); color: var(--paper); }
+.download[aria-disabled="true"] { color: var(--muted); border-color: var(--line); cursor: default; }
+a:focus-visible, summary:focus-visible { outline: 2px solid var(--ink); outline-offset: 5px; }
+details { margin-top: 2rem; font-size: .95rem; }
+summary { cursor: pointer; width: fit-content; }
+details p { max-width: 38rem; color: var(--muted); }
+footer { display: flex; justify-content: space-between; gap: 1rem; margin-top: 4rem; color: var(--muted); font-size: .875rem; }
+@media (max-width: 560px) { main { padding-top: 3rem; } article { align-items: flex-start; flex-direction: column; gap: 1rem; } .download { width: 100%; } footer { margin-top: 3rem; } }
+@media (prefers-color-scheme: dark) { :root { --paper: #161616; --ink: #eee; --muted: #aaa; --line: #393939; } }
