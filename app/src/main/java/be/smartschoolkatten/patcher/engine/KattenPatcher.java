@@ -30,9 +30,14 @@ public final class KattenPatcher {
     private int avatarHooks, applicationHooks, authorityHooks;
     private final List<ClassDef> overflowClasses = new ArrayList<>();
     private final Map<String,String> renamed = new HashMap<>();
-    public KattenPatcher() {
+    private final String targetPackage,displayName;
+    public KattenPatcher() {this(PACKAGE);}
+    public KattenPatcher(String targetPackage) {
+        if(!targetPackage.equals(PACKAGE) && !targetPackage.equals(PACKAGE+".test"))throw new IllegalArgumentException("Onbekende appvariant");
+        this.targetPackage=targetPackage;
+        displayName=targetPackage.endsWith(".test")?"Smartschool Katten (test)":"Smartschool Katten";
         for(String suffix:Arrays.asList("androidx-startup","provider","IMGLYAutoInit","firebaseinitprovider","SentryInitProvider","SentryPerformanceProvider","SentryNdkPreloadProvider","DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION"))
-            renamed.put(ORIGINAL+"."+suffix,PACKAGE+"."+suffix);
+            renamed.put(ORIGINAL+"."+suffix,targetPackage+"."+suffix);
     }
     public void patch(File input, File output, File assets, File identityDirectory, Progress progress) throws Exception {
         patchBase(input, output, assets, identityDirectory, progress, false);
@@ -67,17 +72,17 @@ public final class KattenPatcher {
                 if(name.equals("AndroidManifest.xml")) {
                     if (!completeSet && BinaryResources.requiresSplits(data))
                         throw new IOException("Deze download is alleen de basis-APK. De verplichte processor- en scherm-APK's ontbreken. Een volledige APK of ondersteuning voor split-APK's is nodig om deze versie te installeren.");
-                    data=BinaryResources.rewrite(data,s->s.equals(ORIGINAL)?PACKAGE:renamed.getOrDefault(s,s),null);
+                    data=BinaryResources.rewrite(data,s->s.equals(ORIGINAL)?targetPackage:renamed.getOrDefault(s,s),null);
                     data=BinaryResources.withoutEditorComponents(data);
                 } else if(name.equals("resources.arsc")) {
                     data=BinaryResources.rewrite(data,s->{
-                        if(s.equals("Smartschool"))return "Smartschool Katten";
+                        if(s.equals("Smartschool"))return displayName;
                         if(s.equals("res/drawable/ic_launcher_foreground.xml"))return "res/drawable/ic_launcher_foreground.jpg";
                         if(s.equals("res/drawable/ic_smartschool_app_logo.xml"))return "res/drawable/katten_app_logo.png";
                         if(s.equals("res/drawable/splash_logo.xml"))return "res/drawable/katten_splash_logo.png";
                         if(s.equals("res/drawable/splash_logo_animated.xml"))return "res/drawable/katten_splash_logo_animated.png";
                         return s;
-                    },PACKAGE);
+                    },targetPackage);
                 } else if(name.matches("classes[0-9]*\\.dex")) {
                     dexCount++;
                     phase="Kattenprofielen aanpassen ("+name+")…";
@@ -148,10 +153,10 @@ public final class KattenPatcher {
                     byte[] data;
                     try (InputStream in = original.getInputStream(entry)) { data = read(in); }
                     if (name.equals("AndroidManifest.xml")) {
-                        data = BinaryResources.rewrite(data, s -> s.equals(ORIGINAL) ? PACKAGE : renamed.getOrDefault(s, s), null);
+                        data = BinaryResources.rewrite(data, s -> s.equals(ORIGINAL) ? targetPackage : renamed.getOrDefault(s, s), null);
                         data = BinaryResources.withoutEditorComponents(data);
                     } else if (name.equals("resources.arsc"))
-                        data = BinaryResources.rewrite(data, s -> s.equals("Smartschool") ? "Smartschool Katten" : s, PACKAGE);
+                        data = BinaryResources.rewrite(data, s -> s.equals("Smartschool") ? displayName : s, targetPackage);
                     // Keep native libraries uncompressed; apksig aligns them to 16 KiB.
                     put(zip, name, data, name.equals("resources.arsc") || name.matches("lib/[^/]+/[^/]+\\.so"));
                 }

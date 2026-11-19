@@ -88,6 +88,7 @@ def main():
     signing = parser.add_mutually_exclusive_group(required=True)
     signing.add_argument("--signing-dir", type=Path, help="Existing signing.pk8 and signing.der; never generates a new release identity")
     signing.add_argument("--unsigned", action="store_true", help="Build for local signing; never publish this as an update")
+    signing.add_argument("--debug-test", action="store_true", help="Sign an isolated, debuggable .test app; never touches the installed app")
     args = parser.parse_args()
     if args.signing_dir and not all((args.signing_dir / name).is_file() for name in ("signing.pk8", "signing.der")):
         parser.error("Existing app signing.pk8 and signing.der are required")
@@ -98,6 +99,8 @@ def main():
     args.output.parent.mkdir(parents=True, exist_ok=True)
     if args.unsigned and args.output.name == "Smartschool-Katten.apk":
         args.output = args.output.with_name("Smartschool-Katten-unsigned.apk")
+    if args.debug_test:
+        args.output = args.output.with_name("Smartschool-Katten-test.apk")
     work_root = ROOT / "build/standalone-apk"
     work_root.mkdir(parents=True, exist_ok=True)
 
@@ -127,8 +130,9 @@ def main():
         patched = work / "patched.apk"
         # The intermediate identity is never a release identity. Final signing
         # occurs only after the updater manifest and alignment are finished.
+        identity = work_root / "debug-signing" if args.debug_test else work / "intermediate-signing"
         run(java, "-Xmx1g", "-cp", f"{classes}:{ROOT / 'app/libs/*'}", "PatchCli", source, patched,
-            ROOT / "app/src/main/assets/patch", work / "intermediate-signing")
+            ROOT / "app/src/main/assets/patch", identity, "be.smartschoolkatten.mobile.test" if args.debug_test else "be.smartschoolkatten.mobile")
         unsigned = work / "unsigned.apk"
         with zipfile.ZipFile(patched) as original, zipfile.ZipFile(unsigned, "w") as output:
             for item in original.infolist():
@@ -136,7 +140,7 @@ def main():
                     continue
                 data = original.read(item)
                 if item.filename == "AndroidManifest.xml":
-                    data = decorate(data, revision)
+                    data = decorate(data, revision, debug=args.debug_test)
                 compression = zipfile.ZIP_STORED if item.filename == "resources.arsc" or item.filename.startswith("lib/") else zipfile.ZIP_DEFLATED
                 output.writestr(item.filename, data, compress_type=compression)
         aligned = work / "aligned.apk"
@@ -145,7 +149,8 @@ def main():
             shutil.copyfile(aligned, args.output)
             print("UNSIGNED build: sign with your existing app identity before installation or publication.")
         else:
-            run(java, "-jar", sdk_tools / "lib/apksigner.jar", "sign", "--key", args.signing_dir / "signing.pk8", "--cert", args.signing_dir / "signing.der",
+            final_identity = identity if args.debug_test else args.signing_dir
+            run(java, "-jar", sdk_tools / "lib/apksigner.jar", "sign", "--key", final_identity / "signing.pk8", "--cert", final_identity / "signing.der",
                 "--out", args.output, aligned)
             run(java, "-jar", sdk_tools / "lib/apksigner.jar", "verify", "--verbose", "--print-certs", args.output)
         run(sdk_tools / "zipalign", "-c", "-P", "16", "4", args.output)
@@ -153,7 +158,11 @@ def main():
         for test, inputs in (("UiHooksTest", [source]), ("PatchAssertions", [source, args.output]), ("ModelIntegrityTest", [source, args.output]),
                              ("RuntimeLinkageTest", [args.output]), ("StartupSafetyTest", [args.output])):
             run(java, "-Xmx1g", "-cp", classpath, test, *inputs)
-        run(sdk_tools / "aapt2", "dump", "badging", args.output)
+        badging = subprocess.run([str(sdk_tools / "aapt2"), "dump", "badging", str(args.output)], check=True, capture_output=True, text=True).stdout
+        print(badging)
+        expected_package = "be.smartschoolkatten.mobile.test" if args.debug_test else "be.smartschoolkatten.mobile"
+        if f"package: name='{expected_package}'" not in badging or args.debug_test and "application-debuggable" not in badging:
+            raise ValueError("Wrong package or missing debug flag in test APK")
         with args.output.open("rb") as stream:
             digest = hashlib.file_digest(stream, "sha256").hexdigest()
         args.output.with_suffix(".apk.sha256").write_text(f"{digest}  {args.output.name}\n")

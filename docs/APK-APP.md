@@ -15,8 +15,11 @@ installatie. Bij ontbrekende releases of netwerkproblemen blijft de app bruikbaa
 
 ## Eerst testen
 
-De workflow **APK testen** bouwt op de branch `apk-test` een ongetekend testbestand.
-Hij publiceert geen release en gebruikt geen privésleutels. De bron is de complete
+De workflow **APK testen** bouwt op de branch `apk-test` een getekende debugtest.
+Die heet **Smartschool Katten (test)**, gebruikt pakket `be.smartschoolkatten.mobile.test`
+en staat naast de bestaande app. Voor deze variant is geen releasesleutel nodig.
+De testsleutel staat in een aparte buildcache en wordt nooit voor de gewone app gebruikt.
+De workflow publiceert geen release. De bron is de complete
 Smartschool 12.3.0-set; APKEditor 1.4.9 voegt de configuratie-APK's samen. De JAR
 wordt tegen zijn gepinde SHA-256 gecontroleerd. Een losse basis-APK met ontbrekende
 splits wordt geweigerd.
@@ -27,7 +30,7 @@ Lokaal controleren:
 python3 tools/test-runtime.py --java-home /pad/naar/jdk --sdk /pad/naar/sdk
 python3 tools/test-compose-bridge.py --java-home /pad/naar/jdk
 node tools/test-downloads.mjs
-python3 tools/build-apk.py --java-home /pad/naar/jdk --sdk /pad/naar/sdk --unsigned
+python3 tools/build-apk.py --java-home /pad/naar/jdk --sdk /pad/naar/sdk --debug-test
 ```
 
 Een aanwezige volledige bron kun je meegeven met `--source /pad/naar/bron.apks`.

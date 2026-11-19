@@ -61,7 +61,7 @@ def string_pool(values, original):
             + struct.pack(f"<{len(offsets)}I", *offsets) + style_offsets + data + spans)
 
 
-def decorate(manifest, revision):
+def decorate(manifest, revision, debug=False):
     if not 1 <= revision <= 999999:
         raise ValueError("Invalid release revision")
     parts = list(chunks(manifest))
@@ -82,6 +82,7 @@ def decorate(manifest, revision):
     namespace = index(ANDROID)
     name = index("name", 0x01010003)
     exported = index("exported", 0x01010010)
+    debuggable = index("debuggable", 0x0101000f) if debug else None
 
     def attribute(key, value, kind=3):
         return struct.pack("<iiiHBBI", namespace, key, value if kind == 3 else -1, 8, 0, kind, value)
@@ -105,9 +106,13 @@ def decorate(manifest, revision):
             header = struct.unpack_from("<H", data, 2)[0]
             tag = names[struct.unpack_from("<i", data, header + 4)[0]]
             start, stride, count = struct.unpack_from("<HHH", data, header + 8)
+            has_debuggable = False
             for i in range(count):
                 at = header + start + stride * i
                 key = names[struct.unpack_from("<i", data, at + 4)[0]]
+                if tag == "application" and key == "debuggable" and debug:
+                    has_debuggable = True
+                    data[at:at + 20] = attribute(debuggable, 0xffffffff, 0x12)
                 if tag == "manifest" and key in ("requiredSplitTypes", "split", "isSplitRequired"):
                     raise ValueError("Source still requires split APKs; merge the complete source first")
                 if tag == "manifest" and key in ("versionCode", "versionCodeMajor", "versionName"):
@@ -118,6 +123,11 @@ def decorate(manifest, revision):
                     permission_seen |= names[value] == PERMISSION
             if tag == "application":
                 application = True
+                if debug and not has_debuggable:
+                    at = header + start + stride * count
+                    data[at:at] = attribute(debuggable, 0xffffffff, 0x12) + bytes(stride - 20)
+                    struct.pack_into("<H", data, header + 12, count + 1)
+                    struct.pack_into("<I", data, 4, len(data))
                 if not permission_seen:
                     output.append(permission)
             manifest_seen |= tag == "manifest"

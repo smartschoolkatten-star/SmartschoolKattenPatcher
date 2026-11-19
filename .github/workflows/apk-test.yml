@@ -30,11 +30,16 @@ jobs:
         run: python3 tools/test-compose-bridge.py --java-home "$JAVA_HOME"
       - name: Downloadpagina controleren
         run: node tools/test-downloads.mjs
+      - name: Testidentiteit bewaren
+        uses: actions/cache@v4
+        with:
+          path: build/standalone-apk/debug-signing
+          key: katten-isolated-test-identity-v1
       - name: Volledige APK bouwen voor tests
-        run: python3 tools/build-apk.py --java-home "$JAVA_HOME" --sdk "$ANDROID_HOME" --unsigned
+        run: python3 tools/build-apk.py --java-home "$JAVA_HOME" --sdk "$ANDROID_HOME" --debug-test
       - uses: actions/upload-artifact@v4
         with:
-          name: Smartschool-Katten-test-unsigned
+          name: Smartschool-Katten-test
           path: artifacts/apk-release/*
           if-no-files-found: error
           retention-days: 7
